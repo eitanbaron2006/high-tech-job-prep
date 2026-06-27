@@ -1994,7 +1994,7 @@ def find_kth_largest(nums, k):
           className="fixed bottom-6 left-6 z-[9999] bg-[var(--accent)] hover:scale-110 active:scale-95 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center cursor-pointer transition-all border border-white/10"
           title="עוזר למידה AI אישי"
         >
-          <MessageSquare size={24} fill="currentColor" className={isFloatingChatOpen ? "rotate-90 transition-all duration-200 text-white" : "transition-all duration-200 text-white"} />
+          <MessageSquare size={24} className={isFloatingChatOpen ? "rotate-90 transition-all duration-200 text-white" : "transition-all duration-200 text-white"} />
         </button>
 
         {/* EXPANDED FLOATING CHAT WINDOW */}
@@ -2005,7 +2005,7 @@ def find_kth_largest(nums, k):
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 30, scale: 0.9 }}
               transition={{ duration: 0.2 }}
-              className="fixed bottom-24 left-6 z-[9999] w-[480px] max-w-[calc(100vw-32px)] h-[520px] max-h-[calc(100vh-120px)] rounded-2xl shadow-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden flex flex-col"
+              className="fixed bottom-24 left-6 z-[9999] w-[600px] max-w-[calc(100vw-32px)] h-[520px] max-h-[calc(100vh-120px)] rounded-2xl shadow-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden flex flex-col"
             >
               <CompanionChat 
                 user={user} 

@@ -703,3 +703,15 @@ td.mono.r { color: #dc2626; }
   line-height: 1.6 !important;
 }
 
+/* User's orange bubble text color - White in both light and dark themes */
+.companion-chat-bubble-user,
+.companion-chat-bubble-user p,
+.companion-chat-bubble-user span,
+.companion-chat-bubble-user li,
+.companion-chat-bubble-user pre,
+.companion-chat-bubble-user code,
+.companion-chat-bubble-user strong,
+.companion-chat-bubble-user a {
+  color: #ffffff !important;
+}
+

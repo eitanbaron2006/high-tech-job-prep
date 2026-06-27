@@ -227,9 +227,7 @@ export default function CompanionChat({ user, onClose, highThinking: propHighThi
 
   const deleteThread = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const confirmed = window.confirm("האם אתה בטוח שברצונך למחוק שיחה זו?");
-    if (!confirmed) return;
-
+    
     const filtered = threads.filter((t) => t.id !== id);
     setThreads(filtered);
 
@@ -266,14 +264,6 @@ export default function CompanionChat({ user, onClose, highThinking: propHighThi
         </div>
         
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => createNewThread()}
-            className="p-1.5 bg-[var(--accent-tint)] hover:bg-[var(--accent-tint)]/80 text-[var(--accent)] rounded-lg transition cursor-pointer"
-            title="שיחה חדשה"
-          >
-            <Plus size={16} />
-          </button>
-
           {onClose && (
             <button
               onClick={onClose}
@@ -291,7 +281,16 @@ export default function CompanionChat({ user, onClose, highThinking: propHighThi
         {/* SIDEBAR THREADS LIST */}
         <div className="w-[150px] shrink-0 border-l border-[var(--border)] bg-[var(--accent-tint)]/15 overflow-y-auto hidden sm:block">
           <div className="p-3 space-y-1">
-            <h4 className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider px-2 mb-2">שיחות קודמות</h4>
+            <div className="flex items-center justify-between px-2 mb-2">
+              <h4 className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider">שיחות קודמות</h4>
+              <button
+                onClick={() => createNewThread()}
+                className="p-1 hover:bg-[var(--accent-tint)] text-[var(--accent)] rounded transition cursor-pointer flex items-center justify-center"
+                title="שיחה חדשה"
+              >
+                <Plus size={12} />
+              </button>
+            </div>
             {threads.map((t) => (
               <div
                 key={t.id}
@@ -305,9 +304,9 @@ export default function CompanionChat({ user, onClose, highThinking: propHighThi
                 <span className="truncate max-w-[100px]">{t.title}</span>
                 <button
                   onClick={(e) => deleteThread(t.id, e)}
-                  className="p-1 text-[var(--muted)] hover:text-red-500 rounded transition opacity-0 group-hover:opacity-100"
+                  className="p-1 text-[var(--muted)] hover:text-red-500 rounded transition opacity-0 group-hover:opacity-100 cursor-pointer z-10"
                 >
-                  <Trash2 size={12} />
+                  <Trash2 size={12} className="cursor-pointer" />
                 </button>
               </div>
             ))}
@@ -336,7 +335,7 @@ export default function CompanionChat({ user, onClose, highThinking: propHighThi
                 <div 
                   className={`companion-chat-bubble p-4 rounded-2xl leading-relaxed text-[0.8rem] shadow-xs ${
                     m.sender === "user"
-                      ? "bg-[var(--accent)] text-white rounded-tr-none"
+                      ? "companion-chat-bubble-user bg-[var(--accent)] text-white rounded-tr-none"
                       : "bg-[var(--panel)] border border-[var(--border)] text-[var(--text)] rounded-tl-none"
                   }`}
                   style={{ fontSize: "0.8rem" }}
