@@ -80,8 +80,9 @@ const getDailyRecommendation = () => {
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">("light");
-  const [activeTab, setActiveTab] = useState<"home" | "guide" | "history">("home");
+  const [activeTab, setActiveTab] = useState<"home" | "guide" | "history">("guide");
   const [isFloatingChatOpen, setIsFloatingChatOpen] = useState(false);
+  const [isProgressOpen, setIsProgressOpen] = useState(false);
   const [completedPatterns, setCompletedPatterns] = useState<Record<string, boolean>>(() => {
     try {
       const saved = localStorage.getItem("completed_patterns");
@@ -129,6 +130,9 @@ export default function App() {
 
   // Puzzle open states
   const [openPuzzles, setOpenPuzzles] = useState<Record<number, boolean>>({});
+
+  // Expanded FAQ state
+  const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
   // Active section scroll tracking
   const sectionsRef = {
@@ -208,7 +212,7 @@ export default function App() {
     };
   }, []);
 
-  // Set active section on scroll
+  // Set active section on scroll 
   useEffect(() => {
     if (activeTab !== "guide") return;
 
@@ -253,6 +257,13 @@ export default function App() {
     }, 50);
   };
 
+  const scrollToId = (id: string) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   // Nav sections up/down buttons
   const orderedSections: Array<keyof typeof sectionsRef> = [
     "intro", "complexity", "two-pointers", "sliding-window", "hash-map",
@@ -269,7 +280,7 @@ export default function App() {
     scrollToSection(orderedSections[targetIdx]);
   };
 
-  if (!user) {
+  if (!user || activeTab === "home") {
     return (
       <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] transition-colors duration-300 flex flex-col" dir="rtl">
         {/* Public Header */}
@@ -279,21 +290,38 @@ export default function App() {
               <div className="w-9 h-9 rounded-lg bg-[var(--accent)] text-white font-black flex items-center justify-center text-base shadow-sm shrink-0">
                 אל
               </div>
-              <div className="flex flex-col justify-center select-none text-right">
-                <h1 className="font-extrabold text-sm sm:text-base leading-none text-[var(--text)] m-0 p-0 mb-1.5">אלגוריתמים לראיונות</h1>
+              <div className="flex flex-col justify-center select-none text-right gap-0.5">
+                <h1 className="font-extrabold text-sm sm:text-base leading-none text-[var(--text)] m-0 p-0">אלגוריתמים לראיונות</h1>
                 <p className="text-[10px] text-[var(--muted)] leading-none m-0 p-0">מדריך הכנה אינטראקטיבי להייטק</p>
               </div>
             </div>
 
             {/* Navigation links in public header */}
-            <nav className="hidden md:flex items-center gap-2">
-              <button
-                onClick={() => {}} 
-                className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-black transition cursor-pointer bg-[var(--accent)] text-white shadow-xs flex items-center gap-1.5"
+            <nav className="hidden md:flex items-center gap-6">
+              <a
+                onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+                className="text-xs sm:text-sm font-bold text-[var(--muted)] hover:text-[var(--text)] transition cursor-pointer hover:underline decoration-2 underline-offset-4"
               >
-                <Home size={14} />
-                <span>בית</span>
-              </button>
+                בית
+              </a>
+              <a
+                onClick={() => scrollToId("features-section")}
+                className="text-xs sm:text-sm font-bold text-[var(--muted)] hover:text-[var(--text)] transition cursor-pointer hover:underline decoration-2 underline-offset-4"
+              >
+                מה בפלטפורמה
+              </a>
+              <a
+                onClick={() => scrollToId("patterns")}
+                className="text-xs sm:text-sm font-bold text-[var(--muted)] hover:text-[var(--text)] transition cursor-pointer hover:underline decoration-2 underline-offset-4"
+              >
+                תבניות הליבה
+              </a>
+              <a
+                onClick={() => scrollToId("faq-section")}
+                className="text-xs sm:text-sm font-bold text-[var(--muted)] hover:text-[var(--text)] transition cursor-pointer hover:underline decoration-2 underline-offset-4"
+              >
+                שאלות נפוצות
+              </a>
             </nav>
 
             <div className="flex items-center gap-3">
@@ -306,13 +334,42 @@ export default function App() {
                 <span className="hidden sm:inline">{theme === "dark" ? "מצב בהיר" : "מצב כהה"}</span>
               </button>
 
-              <button
-                onClick={loginWithGoogle}
-                className="flex items-center gap-1.5 bg-[var(--accent)] text-white font-extrabold text-xs sm:text-sm py-2 px-4 rounded-xl hover:brightness-105 active:scale-95 transition cursor-pointer shadow-sm"
-              >
-                <LogIn size={14} />
-                <span>התחבר עם Google</span>
-              </button>
+              {user ? (
+                <>
+                  <button
+                    onClick={() => { setActiveTab("guide"); setSidebarOpen(false); }}
+                    className="flex items-center gap-1.5 bg-[var(--accent)] text-white font-extrabold text-xs sm:text-sm py-2 px-4 rounded-xl hover:brightness-105 active:scale-95 transition cursor-pointer shadow-sm"
+                  >
+                    <BookOpen size={14} />
+                    <span>מדריך הכנה</span>
+                  </button>
+                  <div className="flex items-center gap-2 border-r border-[var(--border)] pr-2 sm:pr-3 mr-1 shrink-0">
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <div className="w-7 h-7 rounded-full bg-[var(--accent-tint)] text-[var(--accent)] font-black flex items-center justify-center border border-[var(--accent)]/30 shrink-0 select-none text-xs">
+                        {user.displayName?.charAt(0) || "U"}
+                      </div>
+                      <div className="hidden md:block text-right overflow-hidden leading-none">
+                        <p className="text-xs font-black truncate text-[var(--text)] m-0 p-0">{user.displayName}</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={logout}
+                      className="p-1.5 hover:bg-red-500/10 text-[var(--muted)] hover:text-red-500 rounded-lg transition cursor-pointer shrink-0"
+                      title="התנתק"
+                    >
+                      <LogOut size={14} />
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <button
+                  onClick={loginWithGoogle}
+                  className="flex items-center gap-1.5 bg-[var(--accent)] text-white font-extrabold text-xs sm:text-sm py-2 px-4 rounded-xl hover:brightness-105 active:scale-95 transition cursor-pointer shadow-sm"
+                >
+                  <LogIn size={14} />
+                  <span>התחבר עם Google</span>
+                </button>
+              )}
             </div>
           </div>
         </header>
@@ -333,13 +390,23 @@ export default function App() {
               מדריך הכנה אינטראקטיבי מוביל המשלב ניתוח מעשי של 8 תבניות קוד מרכזיות, 16 חידות זיהוי מקוריות, וליווי צמוד של בינה מלאכותית מבוססת קול ותמונות.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4 w-full">
-              <button
-                onClick={loginWithGoogle}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-[var(--accent)] hover:brightness-105 text-white font-black text-sm py-3 px-8 rounded-xl shadow-md cursor-pointer transition active:scale-95"
-              >
-                <LogIn size={16} />
-                התחל ללמוד עכשיו בחינם
-              </button>
+              {user ? (
+                <button
+                  onClick={() => { setActiveTab("guide"); setSidebarOpen(false); }}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 bg-[var(--accent)] hover:brightness-105 text-white font-black text-sm py-3 px-8 rounded-xl shadow-md cursor-pointer transition active:scale-95"
+                >
+                  <BookOpen size={16} />
+                  המשך ללמוד במדריך
+                </button>
+              ) : (
+                <button
+                  onClick={loginWithGoogle}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 bg-[var(--accent)] hover:brightness-105 text-white font-black text-sm py-3 px-8 rounded-xl shadow-md cursor-pointer transition active:scale-95"
+                >
+                  <LogIn size={16} />
+                  התחל ללמוד עכשיו בחינם
+                </button>
+              )}
               <a
                 href="#patterns"
                 className="w-full sm:w-auto text-center border border-[var(--border)] bg-[var(--panel)] text-[var(--text)] font-extrabold text-sm py-3 px-8 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition"
@@ -365,7 +432,7 @@ export default function App() {
           </div>
 
           {/* FEATURES GRID */}
-          <div className="space-y-6">
+          <div id="features-section" className="scroll-mt-20 space-y-6">
             <h2 className="text-xl sm:text-2xl font-black text-[var(--text)] border-b border-[var(--border)] pb-3 flex items-center gap-2.5">
               <Brain size={24} className="text-[var(--accent)]" />
               <span>מה מחכה לך בפלטפורמה האינטראקטיבית?</span>
@@ -414,11 +481,11 @@ export default function App() {
           </div>
 
           {/* 8 PATTERNS PREVIEW SECTION */}
-          <div id="patterns" className="space-y-6 pt-4">
+          <div id="patterns" className="scroll-mt-20 space-y-6 pt-4">
             <div className="text-right space-y-1">
               <h2 className="text-xl sm:text-2xl font-black text-[var(--text)] flex items-center gap-2.5">
-                <Lock size={22} className="text-[var(--accent)]" />
-                <span>8 תבניות הליבה לראיונות (התחבר כדי לפתוח)</span>
+                {!user && <Lock size={22} className="text-[var(--accent)]" />}
+                <span>8 תבניות הליבה לראיונות {user ? "(לחץ על תבנית כדי להתחיל ללמוד)" : "(התחבר כדי לפתוח)"}</span>
               </h2>
               <p className="text-xs text-[var(--muted)]">
                 אלו הן שמונה התבניות האלגוריתמיות המכסות מעל 85% מכלל שאלות הראיונות בחברות המובילות.
@@ -429,7 +496,13 @@ export default function App() {
               {DEFAULT_PATTERNS.map((pat) => (
                 <div
                   key={pat.id}
-                  onClick={loginWithGoogle}
+                  onClick={() => {
+                    if (user) {
+                      scrollToSection(pat.id as any);
+                    } else {
+                      loginWithGoogle();
+                    }
+                  }}
                   className="bg-[var(--panel)] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] border border-[var(--border)] p-5 rounded-2xl transition cursor-pointer flex flex-col justify-between min-h-[160px] text-right group relative overflow-hidden shadow-xs"
                 >
                   <div className="space-y-1">
@@ -438,7 +511,7 @@ export default function App() {
                   </div>
                   <div className="text-[10px] font-black text-[var(--accent)] flex items-center gap-1.5 mt-auto">
                     <span>קרא והתאמן במדריך</span>
-                    <Lock size={12} className="text-[var(--accent)]" />
+                    {!user && <Lock size={12} className="text-[var(--accent)]" />}
                   </div>
                 </div>
               ))}
@@ -446,7 +519,7 @@ export default function App() {
           </div>
 
           {/* FAQ SECTION */}
-          <div className="space-y-6">
+          <div id="faq-section" className="scroll-mt-20 space-y-6">
             <h2 className="text-xl sm:text-2xl font-black text-[var(--text)] border-b border-[var(--border)] pb-3 flex items-center gap-2.5">
               <HelpCircle size={22} className="text-[var(--accent)]" />
               <span>שאלות נפוצות</span>
@@ -482,13 +555,23 @@ export default function App() {
             <p className="text-xs sm:text-sm text-[var(--muted)] max-w-lg mx-auto text-center">
               אלפי מועמדים כבר מבינים ששליטה בתבניות אלגוריתמיות היא הדרך המהירה והבטוחה ביותר לעבור בהצלחה את שלבי הסינון הטכניים.
             </p>
-            <button
-              onClick={loginWithGoogle}
-              className="inline-flex items-center gap-2 bg-[var(--accent)] hover:brightness-105 text-white font-black text-sm py-3 px-8 rounded-xl shadow-md cursor-pointer transition active:scale-95"
-            >
-              <LogIn size={16} />
-              התחבר עם Google והתחל מיד
-            </button>
+            {user ? (
+              <button
+                onClick={() => { setActiveTab("guide"); setSidebarOpen(false); }}
+                className="inline-flex items-center gap-2 bg-[var(--accent)] hover:brightness-105 text-white font-black text-sm py-3 px-8 rounded-xl shadow-md cursor-pointer transition active:scale-95"
+              >
+                <BookOpen size={16} />
+                המשך ללמוד במדריך
+              </button>
+            ) : (
+              <button
+                onClick={loginWithGoogle}
+                className="inline-flex items-center gap-2 bg-[var(--accent)] hover:brightness-105 text-white font-black text-sm py-3 px-8 rounded-xl shadow-md cursor-pointer transition active:scale-95"
+              >
+                <LogIn size={16} />
+                התחבר עם Google והתחל מיד
+              </button>
+            )}
           </div>
         </main>
 
@@ -503,7 +586,7 @@ export default function App() {
   }
 
   return (
-    <div className="layout" dir="rtl">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] transition-colors duration-300 flex flex-col" dir="rtl">
       
       {/* FLOATING IN-CONTEXT TRIGGER BUTTON */}
       {selectionCoords && activeTab === "guide" && (
@@ -527,197 +610,84 @@ export default function App() {
         </button>
       )}
 
-      {/* ============ SIDEBAR ============ */}
-      <aside className={`sidebar ${sidebarOpen ? "open" : ""}`} id="sidebar">
-        
-        {/* BRAND */}
-        <div className="brand shrink-0 flex items-center gap-2.5">
-          <div className="logo flex items-center justify-center shrink-0">
-            אל
-          </div>
-          <div className="flex flex-col justify-center select-none text-right">
-            <h1 className="font-extrabold text-base leading-none text-[var(--text)] m-0 p-0 mb-1.5">אלגוריתמים לראיונות</h1>
-            <p className="text-[10px] text-[var(--muted)] leading-none m-0 p-0">מדריך הכנה אינטראקטיבי להייטק</p>
-          </div>
-        </div>
-
-        {/* MAIN NAVIGATION SCROLL */}
-        <div className="nav-scroll">
-          <nav>
-            <div className="nav-group">
-              <div className="gtitle">התחלה</div>
-              <button 
-                onClick={() => scrollToSection("intro")} 
-                className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "intro" ? "active" : ""}`}
-              >
-                סקירה כללית
-              </button>
-              <button 
-                onClick={() => scrollToSection("complexity")} 
-                className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "complexity" ? "active" : ""}`}
-              >
-                סיבוכיות — המדריך למתחיל
-              </button>
-            </div>
-
-            <div className="nav-group">
-              <div className="gtitle">8 התבניות הנפוצות</div>
-              <button 
-                onClick={() => scrollToSection("two-pointers")} 
-                className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "two-pointers" ? "active" : ""}`}
-              >
-                1 · שני מצביעים
-              </button>
-              <button 
-                onClick={() => scrollToSection("sliding-window")} 
-                className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "sliding-window" ? "active" : ""}`}
-              >
-                2 · חלון מחליק
-              </button>
-              <button 
-                onClick={() => scrollToSection("hash-map")} 
-                className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "hash-map" ? "active" : ""}`}
-              >
-                3 · מפת גיבוב
-              </button>
-              <button 
-                onClick={() => scrollToSection("bfs-dfs")} 
-                className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "bfs-dfs" ? "active" : ""}`}
-              >
-                4 · סריקת גרפים ועצים
-              </button>
-              <button 
-                onClick={() => scrollToSection("dp")} 
-                className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "dp" ? "active" : ""}`}
-              >
-                5 · תכנון דינמי
-              </button>
-              <button 
-                onClick={() => scrollToSection("heap")} 
-                className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "heap" ? "active" : ""}`}
-              >
-                6 · ערימה / תור עדיפויות
-              </button>
-              <button 
-                onClick={() => scrollToSection("binary-search")} 
-                className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "binary-search" ? "active" : ""}`}
-              >
-                7 · חיפוש בינארי על התשובה
-              </button>
-              <button 
-                onClick={() => scrollToSection("monotonic-stack")} 
-                className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "monotonic-stack" ? "active" : ""}`}
-              >
-                8 · מחסנית מונוטונית
-              </button>
-            </div>
-
-            <div className="nav-group">
-              <div className="gtitle">אימון ושינון</div>
-              <button 
-                onClick={() => scrollToSection("puzzles")} 
-                className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "puzzles" ? "active" : ""}`}
-              >
-                זהה את התבנית · 16 חידות
-              </button>
-              <button 
-                onClick={() => scrollToSection("tips")} 
-                className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "tips" ? "active" : ""}`}
-              >
-                טיפים אחרונים לראיון
-              </button>
-            </div>
-          </nav>
-        </div>
-
-        {/* PDF Full download button remains */}
-        <div className="dl-wrap shrink-0">
-          <a className="dl-btn text-center cursor-pointer font-bold" href="מדריך_אלגוריתמים_מלא.pdf" download>
-            ⬇ הורד PDF מלא לשינון
-          </a>
-        </div>
-
-      </aside>
-      
-      {/* Mobile Sidebar Overlay */}
-      {sidebarOpen && (
-        <div 
-          className="overlay show" 
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* ============ MAIN CONTENT AREA ============ */}
-      <main className="content">
-        
-        {/* TOPBAR */}
-        <div className="topbar sticky top-0 z-40 bg-[var(--panel)]/95 backdrop-blur-md border-b border-[var(--border)] px-4 py-2.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 h-auto min-h-[3.75rem] -mt-6 -mx-8 mb-6 select-none">
+      {/* GLOBAL STICKY HEADER FOR LOGGED-IN USERS */}
+      <header className="sticky top-0 bg-[var(--panel)]/95 backdrop-blur-md border-b border-[var(--border)] z-50 select-none w-full">
+        <div className="w-full px-4 sm:px-6 h-16 flex items-center justify-between gap-4 relative">
           <div className="flex items-center gap-3">
-            <button 
-              className="menu-btn" 
-              onClick={() => setSidebarOpen(true)}
-              aria-label="פתח תפריט"
-            >
-              ☰
-            </button>
+            {activeTab === "guide" && (
+              <button 
+                className="menu-btn shrink-0" 
+                onClick={() => setSidebarOpen(true)}
+                aria-label="פתח תפריט"
+              >
+                ☰
+              </button>
+            )}
             
-            {/* Navigation links in topbar */}
-            <div className="flex items-center gap-1 sm:gap-2">
-              <button
-                onClick={() => { setActiveTab("home"); setSidebarOpen(false); }}
-                className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-black transition cursor-pointer flex items-center gap-1.5 ${
-                  activeTab === "home"
-                    ? "bg-[var(--accent)] text-white shadow-xs"
-                    : "text-[var(--text)] hover:bg-black/5 dark:hover:bg-white/5 font-medium"
-                }`}
-              >
-                <Home size={14} />
-                <span>בית</span>
-              </button>
-              <button
-                onClick={() => { setActiveTab("guide"); setSidebarOpen(false); }}
-                className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-black transition cursor-pointer flex items-center gap-1.5 ${
-                  activeTab === "guide"
-                    ? "bg-[var(--accent)] text-white shadow-xs"
-                    : "text-[var(--text)] hover:bg-black/5 dark:hover:bg-white/5 font-medium"
-                }`}
-              >
-                <BookOpen size={14} />
-                <span>מדריך</span>
-              </button>
-              <button
-                onClick={() => { setActiveTab("history"); setSidebarOpen(false); }}
-                className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-black transition cursor-pointer flex items-center gap-1.5 ${
-                  activeTab === "history"
-                    ? "bg-[var(--accent)] text-white shadow-xs"
-                    : "text-[var(--text)] hover:bg-black/5 dark:hover:bg-white/5 font-medium"
-                }`}
-              >
-                <History size={14} />
-                <span>היסטוריה</span>
-              </button>
+            {/* Brand Logo & Name */}
+            <div 
+              onClick={() => { setActiveTab("guide"); setSidebarOpen(false); }}
+              className="flex items-center gap-2 cursor-pointer hover:opacity-90 active:scale-95 transition-all z-20"
+              title="חזור למדריך"
+            >
+              <div className="w-8 h-8 rounded-lg bg-[var(--accent)] text-white font-black flex items-center justify-center text-sm shadow-sm shrink-0">
+                אל
+              </div>
+              <div className="flex flex-col justify-center select-none text-right gap-0.5">
+                <h1 className="font-extrabold text-xs sm:text-sm leading-none text-[var(--text)] m-0 p-0">אלגוריתמים לראיונות</h1>
+                <p className="text-[9px] text-[var(--muted)] leading-none m-0 p-0">מדריך הכנה אינטראקטיבי</p>
+              </div>
             </div>
+
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3 mr-auto">
+          {/* Center Navigation Links */}
+          <nav className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-6 z-10">
+            <a
+              onClick={() => { setActiveTab("home"); setSidebarOpen(false); }}
+              className="text-xs sm:text-sm font-bold text-[var(--muted)] hover:text-[var(--text)] transition cursor-pointer hover:underline decoration-2 underline-offset-4"
+            >
+              דף הבית
+            </a>
+            
+            {activeTab === "guide" ? (
+              <a
+                onClick={() => { setActiveTab("history"); setSidebarOpen(false); }}
+                className="text-xs sm:text-sm font-bold text-[var(--muted)] hover:text-[var(--text)] transition cursor-pointer hover:underline decoration-2 underline-offset-4"
+              >
+                היסטוריה
+              </a>
+            ) : (
+              <a
+                onClick={() => { setActiveTab("guide"); setSidebarOpen(false); }}
+                className="text-xs sm:text-sm font-bold text-[var(--muted)] hover:text-[var(--text)] transition cursor-pointer hover:underline decoration-2 underline-offset-4"
+              >
+                מדריך הכנה
+              </a>
+            )}
+          </nav>
+ 
+          {/* Left action area */}
+          <div className="flex items-center gap-2 sm:gap-3 mr-auto z-20">
+            {/* Theme Toggle Button */}
             <button 
-              className="theme-btn py-1.5 px-2.5" 
+              className="p-2 rounded-xl bg-black/5 dark:bg-white/5 text-[var(--muted)] hover:text-[var(--text)] transition cursor-pointer shrink-0" 
               onClick={toggleTheme}
               aria-label="החלף עיצוב"
+              title={theme === "dark" ? "מצב בהיר" : "מצב כהה"}
             >
-              <span className="text-sm">{theme === "dark" ? <Sun size={13} /> : <Moon size={13} />}</span>
-              <span className="hidden sm:inline text-xs">{theme === "dark" ? "מצב בהיר" : "מצב כהה"}</span>
+              {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
             </button>
 
+            {/* Connected User Profile - NO EMAIL */}
             {user && (
-              <div className="flex items-center gap-2 border-r border-[var(--border)] pr-2 sm:pr-3 mr-1">
-                <div className="flex items-center gap-2 overflow-hidden max-w-[120px] sm:max-w-[200px]">
+              <div className="flex items-center gap-2 border-r border-[var(--border)] pr-2 sm:pr-3 mr-1 shrink-0">
+                <div className="flex items-center gap-2 overflow-hidden">
                   <div className="w-7 h-7 rounded-full bg-[var(--accent-tint)] text-[var(--accent)] font-black flex items-center justify-center border border-[var(--accent)]/30 shrink-0 select-none text-xs">
                     {user.displayName?.charAt(0) || "U"}
                   </div>
                   <div className="hidden md:block text-right overflow-hidden leading-none">
                     <p className="text-xs font-black truncate text-[var(--text)] m-0 p-0">{user.displayName}</p>
-                    <p className="text-[9px] text-[var(--muted)] truncate m-0 p-0 mt-0.5">{user.email}</p>
                   </div>
                 </div>
                 <button 
@@ -731,217 +701,126 @@ export default function App() {
             )}
           </div>
         </div>
+      </header>
 
-        {/* CONDITIONAL TAB RENDER WITH TRANSITIONS */}
-        <AnimatePresence mode="wait">
-          {activeTab === "home" && (
-            <motion.div
-              key="home"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-              className="space-y-8"
-            >
-              {/* HERO BANNER */}
-              <div className="hero">
-                <div className="kick">הכנה מהירה וחכמה לראיונות הייטק</div>
-                <h1 className="font-extrabold">מדריך הכנה לראיונות <span className="hl">אלגוריתמים</span></h1>
-                <p>
-                  ברוכים הבאים למרכז ההכנה האינטראקטיבי שלך. המדריך נועד לעזור לך לזהות דפוסי אלגוריתמים נפוצים בראיונות אמת ולפתור שאלות ביעילות, תוך ליווי של עוזר למידה מבוסס בינה מלאכותית לקבלת הסברים מותאמים אישית בקול ותמונות.
-                </p>
-                <div className="stats">
-                  <div className="stat">
-                    <div className="num">8</div>
-                    <div className="lbl">תבניות ליבה</div>
-                  </div>
-                  <div className="stat">
-                    <div className="num">16</div>
-                    <div className="lbl">חידות זיהוי</div>
-                  </div>
-                  <div className="stat">
-                    <div className="num">24</div>
-                    <div className="lbl">שאלות פתורות</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* DYNAMIC RECOMMENDATION OF THE DAY */}
-              {(() => {
-                const rec = getDailyRecommendation();
-                return (
-                  <div className="p-5 rounded-xl border border-[var(--accent)] bg-[var(--accent-tint)] text-right flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 text-xs font-black text-[var(--accent)] uppercase tracking-wider">
-                        <Sparkles size={14} className="animate-pulse" />
-                        <span>המלצת הלימוד של יום {rec.day}</span>
-                      </div>
-                      <h3 className="text-base font-bold text-[var(--text)]">היום מתמקדים בתבנית: {rec.pattern}</h3>
-                      <p className="text-xs text-[var(--text)] opacity-80 m-0">משימה מומלצת: {rec.task}.</p>
-                    </div>
-                    <button
-                      onClick={() => {
-                        const recToSectionMap: Record<number, string> = {
-                          0: "two-pointers",
-                          1: "sliding-window",
-                          2: "hash-map",
-                          3: "bfs-dfs",
-                          4: "dp",
-                          5: "heap",
-                          6: "binary-search",
-                          7: "monotonic-stack"
-                        };
-                        const todayIndex = new Date().getDay() % 8;
-                        const sectionId = recToSectionMap[todayIndex];
-                        scrollToSection(sectionId as any);
-                      }}
-                      className="bg-[var(--accent)] hover:brightness-105 text-white text-xs font-black px-4 py-2 rounded-lg transition shrink-0 cursor-pointer shadow-sm"
-                    >
-                      התחל ללמוד עכשיו
-                    </button>
-                  </div>
-                );
-              })()}
-
-              {/* INTERACTIVE TRACKER CARD */}
-              <div className="bg-[var(--panel)] border border-[var(--border)] p-6 rounded-xl shadow-sm space-y-4 text-right">
-                <div>
-                  <h2 className="text-lg font-extrabold text-[var(--text)] flex items-center gap-2">
-                    <span>📈</span>
-                    <span>מעקב התקדמות אישי</span>
-                  </h2>
-                  <p className="text-xs text-[var(--muted)] m-0">
-                    סמן את תבניות הליבה שאתה מרגיש איתן בנוח ושלמדת במדריך, כדי לעקוב אחר מוכנותך.
-                  </p>
+      {/* Main body with layout class */}
+      <div className="layout flex-1 flex" dir="rtl">
+        
+        {/* ============ SIDEBAR (Only shown in guide tab) ============ */}
+        {activeTab === "guide" && (
+          <aside className={`sidebar ${sidebarOpen ? "open" : ""}`} id="sidebar">
+ 
+            {/* MAIN NAVIGATION SCROLL */}
+            <div className="nav-scroll">
+              <nav>
+                <div className="nav-group">
+                  <div className="gtitle">התחלה</div>
+                  <button 
+                    onClick={() => scrollToSection("intro")} 
+                    className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "intro" ? "active" : ""}`}
+                  >
+                    סקירה כללית
+                  </button>
+                  <button 
+                    onClick={() => scrollToSection("complexity")} 
+                    className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "complexity" ? "active" : ""}`}
+                  >
+                    סיבוכיות — המדריך למתחיל
+                  </button>
                 </div>
 
-                {/* Progress bar */}
-                <div className="space-y-2">
-                  <div className="w-full bg-black/5 dark:bg-white/5 h-3.5 rounded-full overflow-hidden border border-[var(--border)]">
-                    <div 
-                      className="bg-[var(--accent)] h-full transition-all duration-500 ease-out"
-                      style={{ width: `${Math.round((Object.values(completedPatterns).filter(Boolean).length / 8) * 100)}%` }}
-                    />
-                  </div>
-                  <div className="text-xs font-bold text-[var(--accent)] flex justify-between">
-                    <span>{Object.values(completedPatterns).filter(Boolean).length} מתוך 8 תבניות הושלמו</span>
-                    <span>{Math.round((Object.values(completedPatterns).filter(Boolean).length / 8) * 100)}% מוכנות</span>
-                  </div>
+                <div className="nav-group">
+                  <div className="gtitle">8 התבניות הנפוצות</div>
+                  <button 
+                    onClick={() => scrollToSection("two-pointers")} 
+                    className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "two-pointers" ? "active" : ""}`}
+                  >
+                    1 · שני מצביעים
+                  </button>
+                  <button 
+                    onClick={() => scrollToSection("sliding-window")} 
+                    className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "sliding-window" ? "active" : ""}`}
+                  >
+                    2 · חלון מחליק
+                  </button>
+                  <button 
+                    onClick={() => scrollToSection("hash-map")} 
+                    className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "hash-map" ? "active" : ""}`}
+                  >
+                    3 · מפת גיבוב
+                  </button>
+                  <button 
+                    onClick={() => scrollToSection("bfs-dfs")} 
+                    className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "bfs-dfs" ? "active" : ""}`}
+                  >
+                    4 · סריקת גרפים ועצים
+                  </button>
+                  <button 
+                    onClick={() => scrollToSection("dp")} 
+                    className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "dp" ? "active" : ""}`}
+                  >
+                    5 · תכנון דינמי
+                  </button>
+                  <button 
+                    onClick={() => scrollToSection("heap")} 
+                    className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "heap" ? "active" : ""}`}
+                  >
+                    6 · ערימה / תור עדיפויות
+                  </button>
+                  <button 
+                    onClick={() => scrollToSection("binary-search")} 
+                    className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "binary-search" ? "active" : ""}`}
+                  >
+                    7 · חיפוש בינארי על התשובה
+                  </button>
+                  <button 
+                    onClick={() => scrollToSection("monotonic-stack")} 
+                    className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "monotonic-stack" ? "active" : ""}`}
+                  >
+                    8 · מחסנית מונוטונית
+                  </button>
                 </div>
 
-                {/* Grid of patterns */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                  {DEFAULT_PATTERNS.map((pat) => {
-                    const isCompleted = !!completedPatterns[pat.id];
-                    return (
-                      <div
-                        key={pat.id}
-                        onClick={() => {
-                          setCompletedPatterns(prev => ({
-                            ...prev,
-                            [pat.id]: !prev[pat.id]
-                          }));
-                        }}
-                        className={`p-3.5 border rounded-lg text-right flex items-center justify-between gap-3 transition cursor-pointer select-none ${
-                          isCompleted
-                            ? "bg-[var(--accent-tint)] border-[var(--accent)] text-[var(--accent)]"
-                            : "bg-black/5 hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10 border-[var(--border)] text-[var(--text)]"
-                        }`}
-                      >
-                        <div className="overflow-hidden space-y-0.5 animate-none">
-                          <p className="text-xs font-extrabold m-0 truncate">{pat.name}</p>
-                          <p className="text-[10px] text-[var(--muted)] m-0 truncate opacity-85 leading-none">{pat.desc}</p>
-                        </div>
-                        <div className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 transition-all ${
-                          isCompleted
-                            ? "bg-[var(--accent)] border-[var(--accent)] text-white"
-                            : "border-[var(--border)] bg-white dark:bg-black"
-                        }`}>
-                          {isCompleted && <span className="text-xs font-bold">✓</span>}
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="nav-group">
+                  <div className="gtitle">אימון ושינון</div>
+                  <button 
+                    onClick={() => scrollToSection("puzzles")} 
+                    className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "puzzles" ? "active" : ""}`}
+                  >
+                    זהה את התבנית · 16 חידות
+                  </button>
+                  <button 
+                    onClick={() => scrollToSection("tips")} 
+                    className={`nav text-right w-full block transition cursor-pointer ${activeTab === "guide" && activeNavSection === "tips" ? "active" : ""}`}
+                  >
+                    טיפים אחרונים לראיון
+                  </button>
                 </div>
-              </div>
+              </nav>
+            </div>
 
-              {/* QUICK LINKS SECTION */}
-              <div className="space-y-4">
-                <h2 className="text-base font-extrabold text-[var(--text)] border-b border-[var(--border)] pb-2 text-right">
-                  🧭 לאן תרצה להמשיך עכשיו?
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Card 1 */}
-                  <div className="bg-[var(--panel)] border border-[var(--border)] p-5 rounded-xl flex flex-col justify-between transition-all hover:shadow-md hover:border-[var(--accent)] text-right group">
-                    <div className="space-y-2">
-                      <div className="text-xl">📚</div>
-                      <h3 className="font-extrabold text-sm text-[var(--text)] m-0">המדריך המלא ותבניות קוד</h3>
-                      <p className="text-xs text-[var(--muted)] leading-relaxed m-0">
-                        קרא את החומר העיוני, הסברים מפורטים, ניתוחי סיבוכיות Big-O ואת כל 24 השאלות הפתורות במלואן עם קוד תקין מוכן להרצה.
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => setActiveTab("guide")}
-                      className="mt-4 w-full bg-black/5 hover:bg-[var(--accent)] hover:text-white dark:bg-white/5 text-[var(--text)] text-xs font-extrabold py-2 px-3 rounded-lg transition cursor-pointer text-center"
-                    >
-                      מעבר למדריך המלא
-                    </button>
-                  </div>
+            {/* PDF Full download button remains */}
+            <div className="dl-wrap shrink-0">
+              <a className="dl-btn text-center cursor-pointer font-bold" href="מדריך_אלגוריתמים_מלא.pdf" download>
+                ⬇ הורד PDF מלא לשינון
+              </a>
+            </div>
+          </aside>
+        )}
 
-                  {/* Card 2 */}
-                  <div className="bg-[var(--panel)] border border-[var(--border)] p-5 rounded-xl flex flex-col justify-between transition-all hover:shadow-md hover:border-[var(--accent)] text-right group">
-                    <div className="space-y-2">
-                      <div className="text-xl">🧩</div>
-                      <h3 className="font-extrabold text-sm text-[var(--text)] m-0">16 חידות "זהה את התבנית"</h3>
-                      <p className="text-xs text-[var(--muted)] leading-relaxed m-0">
-                        השלב החשוב ביותר בהכנה! בחן את עצמך מול 16 חידות אלגוריתמיות אמיתיות ללא שם הנושא, ובדוק אם הצלחת לזהות נכון את הגישה.
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => scrollToSection("puzzles")}
-                      className="mt-4 w-full bg-black/5 hover:bg-[var(--accent)] hover:text-white dark:bg-white/5 text-[var(--text)] text-xs font-extrabold py-2 px-3 rounded-lg transition cursor-pointer text-center"
-                    >
-                      תרגל את החידות
-                    </button>
-                  </div>
+        {/* Mobile Sidebar Overlay */}
+        {sidebarOpen && activeTab === "guide" && (
+          <div 
+            className="overlay show" 
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
 
-                  {/* Card 3 */}
-                  <div className="bg-[var(--panel)] border border-[var(--border)] p-5 rounded-xl flex flex-col justify-between transition-all hover:shadow-md hover:border-[var(--accent)] text-right group">
-                    <div className="space-y-2">
-                      <div className="text-xl">💬</div>
-                      <h3 className="font-extrabold text-sm text-[var(--text)] m-0">צ'אט תמיכה מלווה בבינה מלאכותית</h3>
-                      <p className="text-xs text-[var(--muted)] leading-relaxed m-0">
-                        שאל שאלות, קבל הסברים מעמיקים מהעוזר שלנו, והעשר את ההבנה שלך לגבי כל נושא באלגוריתמים ומבני נתונים.
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => setIsFloatingChatOpen(true)}
-                      className="mt-4 w-full bg-black/5 hover:bg-[var(--accent)] hover:text-white dark:bg-white/5 text-[var(--text)] text-xs font-extrabold py-2 px-3 rounded-lg transition cursor-pointer text-center"
-                    >
-                      פתח צ'אט תמיכה
-                    </button>
-                  </div>
-
-                  {/* Card 4 */}
-                  <div className="bg-[var(--panel)] border border-[var(--border)] p-5 rounded-xl flex flex-col justify-between transition-all hover:shadow-md hover:border-[var(--accent)] text-right group">
-                    <div className="space-y-2">
-                      <div className="text-xl">⏰</div>
-                      <h3 className="font-extrabold text-sm text-[var(--text)] m-0">שינון וכרטיסיות היסטוריה</h3>
-                      <p className="text-xs text-[var(--muted)] leading-relaxed m-0">
-                        שמור את ההסברים הקוליים והחזותיים שיצרת בעזרת כפתור "אני לא מבין 🧠" וחזור עליהם כדי להבטיח שהכל מובן ב-100%.
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => setActiveTab("history")}
-                      className="mt-4 w-full bg-black/5 hover:bg-[var(--accent)] hover:text-white dark:bg-white/5 text-[var(--text)] text-xs font-extrabold py-2 px-3 rounded-lg transition cursor-pointer text-center"
-                    >
-                      מעבר להיסטוריית שינון
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
+        {/* ============ MAIN CONTENT AREA ============ */}
+        <main className="content">
+          
+          {/* CONDITIONAL TAB RENDER WITH TRANSITIONS */}
+          <AnimatePresence mode="wait">
 
           {activeTab === "guide" && (
             <motion.div
@@ -955,27 +834,66 @@ export default function App() {
               {/* HERO */}
               <div ref={sectionsRef.intro} id="intro" style={{ scrollMarginTop: "0" }}>
                 <div className="hero">
-                  <div className="kick">ערכת לימוד אלגוריתמית מלאה</div>
-                  <h1 className="font-extrabold">כל מה שצריך לראיון <span className="hl">אלגוריתמים</span></h1>
-                  <p>מדריך סיבוכיות מאפס, 8 התבניות הנפוצות ביותר עם 24 שאלות פתורות, ו-16 חידות "זהה את התבנית" לאימון אמיתי. בנוי לזיהוי מהיר של דפוסים — כי זה מה שבאמת נבדק.</p>
+                  <div className="kick font-bold">הכנה מהירה וחכמה לראיונות הייטק</div>
+                  <h1 className="font-extrabold">מדריך הכנה לראיונות <span className="hl">אלגוריתמים</span></h1>
+                  <p>
+                    ברוכים הבאים למרכז ההכנה האינטראקטיבי שלך. המדריך נועד לעזור לך לזהות דפוסי אלגוריתמים נפוצים בראיונות אמת ולפתור שאלות ביעילות, תוך ליווי של עוזר למידה מבוסס בינה מלאכותית לקבלת הסברים מותאמים אישית בקול ותמונות.
+                  </p>
                   <div className="stats">
                     <div className="stat">
                       <div className="num">8</div>
                       <div className="lbl">תבניות ליבה</div>
                     </div>
                     <div className="stat">
-                      <div className="num">40</div>
-                      <div className="lbl">שאלות וחידות</div>
+                      <div className="num">16</div>
+                      <div className="lbl">חידות זיהוי</div>
                     </div>
                     <div className="stat">
-                      <div className="num">∞</div>
-                      <div className="lbl">פעמים לחזור</div>
+                      <div className="num">24</div>
+                      <div className="lbl">שאלות פתורות</div>
                     </div>
                   </div>
                 </div>
                 <p className="section-intro">
                   המדריך בנוי בשלושה חלקים: קודם <strong>מבינים סיבוכיות</strong> (כדי שכל ניתוח Big-O יהיה ברור), אחר כך <strong>לומדים את 8 התבניות</strong> עם שאלות פתורות, ולבסוף <strong>מתאמנים על זיהוי</strong> עם חידות בלי שם האלגוריתם. השתמש בתפריט הצד או הציפה כדי להפעיל את תומך ה-AI!
                 </p>
+
+                {/* DYNAMIC RECOMMENDATION OF THE DAY */}
+                {(() => {
+                  const rec = getDailyRecommendation();
+                  return (
+                    <div id="rec-section" className="scroll-mt-20 p-5 rounded-xl border border-[var(--accent)] bg-[var(--accent-tint)] text-right flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm mb-8">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-xs font-black text-[var(--accent)] uppercase tracking-wider">
+                          <Sparkles size={14} className="animate-pulse" />
+                          <span>המלצת הלימוד של יום {rec.day}</span>
+                        </div>
+                        <h3 className="text-base font-bold text-[var(--text)]">היום מתמקדים בתבנית: {rec.pattern}</h3>
+                        <p className="text-xs text-[var(--text)] opacity-80 m-0">משימה מומלצת: {rec.task}.</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const recToSectionMap: Record<number, string> = {
+                            0: "two-pointers",
+                            1: "sliding-window",
+                            2: "hash-map",
+                            3: "bfs-dfs",
+                            4: "dp",
+                            5: "heap",
+                            6: "binary-search",
+                            7: "monotonic-stack"
+                          };
+                          const todayIndex = new Date().getDay() % 8;
+                          const sectionId = recToSectionMap[todayIndex];
+                          scrollToSection(sectionId as any);
+                        }}
+                        className="bg-[var(--accent)] hover:brightness-105 text-white text-xs font-black px-4 py-2 rounded-lg transition shrink-0 cursor-pointer shadow-sm"
+                      >
+                        התחל ללמוד עכשיו
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* COMPLEXITY SECTION */}
@@ -1818,6 +1736,151 @@ def find_kth_largest(nums, k):
                 </p>
               </div>
 
+              {/* FAQ SECTION */}
+              <div id="faq-section" className="scroll-mt-20 bg-[var(--panel)] border border-[var(--border)] p-6 rounded-xl shadow-sm space-y-4 text-right mt-16">
+                <div>
+                  <h2 className="text-lg font-extrabold text-[var(--text)] flex items-center gap-2">
+                    <span>❓</span>
+                    <span>שאלות נפוצות</span>
+                  </h2>
+                  <p className="text-xs text-[var(--muted)]">כל מה שרצית לדעת על שיטת 8 התבניות ותהליך ההכנה</p>
+                </div>
+
+                <div className="space-y-3 pt-2">
+                  {[
+                    {
+                      q: "למה להתמקד ב-8 תבניות במקום לפתור מאות שאלות ב-LeetCode?",
+                      a: "זיהוי תבניות הוא המפתח להצלחה. בראיונות עבודה לחץ הזמן משמעותי; אם תלמד לזהות את הבעיה כתבנית של 'חלון מחליק' או 'שני מצביעים' תוך דקה, כבר עברת 80% מהדרך לפתרון. במקום לשנן מאות פתרונות ספציפיים, אתה לומד את עקרונות העל ומיישם אותם על כל שאלה חדשה."
+                    },
+                    {
+                      q: "כמה זמן מומלץ להקדיש לכל תבנית?",
+                      a: "מומלץ להקדיש כיומיים-שלושה לכל תבנית. קרא את ההסבר התיאורטי לעומק, עבור על 3 השאלות הפתורות המצורפות, ואז נסה לכתוב את הפתרון בעצמך ללא עזרה. לאחר מכן, נסה לפתור את החידות התואמות כדי לוודא שאתה שולט בזיהוי."
+                    },
+                    {
+                      q: "האם המדריך תומך בכל שפות התכנות?",
+                      a: "כן! במדריך יש קוד מלא ופתרונות ב-JavaScript/TypeScript, אך העקרונות, מבני הנתונים והלוגיקה זהים לחלוטין בכל שפה אחרת כמו Python, Java, C++, C# או Go."
+                    },
+                    {
+                      q: "איך כלי ה-AI 'אני לא מבין' יכול לעזור לי?",
+                      a: "פשוט מאוד: בזמן קריאת המדריך, סמן עם העכבר או האצבע כל קטע קוד או הסבר שאינו ברור לך לחלוטין. מיד יופיע כפתור צף 'אני לא מבין 🧠'. לחיצה עליו תפתח עוזר חכם שיסביר לך את הקטע הספציפי בצורה מופשטת ומותאמת אישית."
+                    },
+                    {
+                      q: "האם יש אפשרות ללמוד במצב לא מקוון (Offline)?",
+                      a: "בוודאי. ניתן להוריד את המדריך המלא כקובץ PDF מעוצב ומסודר ישירות מתפריט הצד או מכרטיסיית 'לאן להמשיך', כך שתוכל ללמוד ולשנן גם ללא חיבור פעיל לאינטרנט."
+                    }
+                  ].map((faq, idx) => {
+                    const isOpen = expandedFaq === idx;
+                    return (
+                      <div 
+                        key={idx} 
+                        className="border border-[var(--border)] rounded-lg overflow-hidden bg-black/[0.01] dark:bg-white/[0.01] transition-all"
+                      >
+                        <button
+                          onClick={() => setExpandedFaq(isOpen ? null : idx)}
+                          className="w-full text-right p-4 flex items-center justify-between gap-4 font-bold text-sm text-[var(--text)] hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                        >
+                          <span>{faq.q}</span>
+                          <span className={`text-xs transition-transform duration-200 shrink-0 ${isOpen ? "rotate-180" : ""}`}>
+                            ▼
+                          </span>
+                        </button>
+                        <AnimatePresence initial={false}>
+                          {isOpen && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="p-4 pt-0 text-xs text-[var(--muted)] leading-relaxed border-t border-[var(--border)] bg-black/[0.02] dark:bg-white/[0.02]">
+                                {faq.a}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* QUICK LINKS SECTION */}
+              <div id="links-section" className="scroll-mt-20 space-y-4 mt-16">
+                <h2 className="text-base font-extrabold text-[var(--text)] border-b border-[var(--border)] pb-2 text-right">
+                  🧭 לאן תרצה להמשיך עכשיו?
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Card 1 */}
+                  <div className="bg-[var(--panel)] border border-[var(--border)] p-5 rounded-xl flex flex-col justify-between transition-all hover:shadow-md hover:border-[var(--accent)] text-right group">
+                    <div className="space-y-2">
+                      <div className="text-xl">📚</div>
+                      <h3 className="font-extrabold text-sm text-[var(--text)] m-0">המדריך המלא ותבניות קוד</h3>
+                      <p className="text-xs text-[var(--muted)] leading-relaxed m-0">
+                        קרא את החומר העיוני, הסברים מפורטים, ניתוחי סיבוכיות Big-O ואת כל 24 השאלות הפתורות במלואן עם קוד תקין מוכן להרצה.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => scrollToSection("intro")}
+                      className="mt-4 w-full bg-black/5 hover:bg-[var(--accent)] hover:text-white dark:bg-white/5 text-[var(--text)] text-xs font-extrabold py-2 px-3 rounded-lg transition cursor-pointer text-center"
+                    >
+                      חזור לראש המדריך
+                    </button>
+                  </div>
+
+                  {/* Card 2 */}
+                  <div className="bg-[var(--panel)] border border-[var(--border)] p-5 rounded-xl flex flex-col justify-between transition-all hover:shadow-md hover:border-[var(--accent)] text-right group">
+                    <div className="space-y-2">
+                      <div className="text-xl">🧩</div>
+                      <h3 className="font-extrabold text-sm text-[var(--text)] m-0">16 חידות "זהה את התבנית"</h3>
+                      <p className="text-xs text-[var(--muted)] leading-relaxed m-0">
+                        השלב החשוב ביותר בהכנה! בחן את עצמך מול 16 חידות אלגוריתמיות אמיתיות ללא שם הנושא, ובדוק אם הצלחת לזהות נכון את הגישה.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => scrollToSection("puzzles")}
+                      className="mt-4 w-full bg-black/5 hover:bg-[var(--accent)] hover:text-white dark:bg-white/5 text-[var(--text)] text-xs font-extrabold py-2 px-3 rounded-lg transition cursor-pointer text-center"
+                    >
+                      תרגל את החידות
+                    </button>
+                  </div>
+
+                  {/* Card 3 */}
+                  <div className="bg-[var(--panel)] border border-[var(--border)] p-5 rounded-xl flex flex-col justify-between transition-all hover:shadow-md hover:border-[var(--accent)] text-right group">
+                    <div className="space-y-2">
+                      <div className="text-xl">💬</div>
+                      <h3 className="font-extrabold text-sm text-[var(--text)] m-0">צ'אט תמיכה מלווה בבינה מלאכותית</h3>
+                      <p className="text-xs text-[var(--muted)] leading-relaxed m-0">
+                        שאל שאלות, קבל הסברים מעמיקים מהעוזר שלנו, והעשר את ההבנה שלך לגבי כל נושא באלגוריתמים ומבני נתונים.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setIsFloatingChatOpen(true)}
+                      className="mt-4 w-full bg-black/5 hover:bg-[var(--accent)] hover:text-white dark:bg-white/5 text-[var(--text)] text-xs font-extrabold py-2 px-3 rounded-lg transition cursor-pointer text-center"
+                    >
+                      פתח צ'אט תמיכה
+                    </button>
+                  </div>
+
+                  {/* Card 4 */}
+                  <div className="bg-[var(--panel)] border border-[var(--border)] p-5 rounded-xl flex flex-col justify-between transition-all hover:shadow-md hover:border-[var(--accent)] text-right group">
+                    <div className="space-y-2">
+                      <div className="text-xl">⏰</div>
+                      <h3 className="font-extrabold text-sm text-[var(--text)] m-0">שינון וכרטיסיות היסטוריה</h3>
+                      <p className="text-xs text-[var(--muted)] leading-relaxed m-0">
+                        שמור את ההסברים הקוליים והחזותיים שיצרת בעזרת כפתור "אני לא מבין 🧠" וחזור עליהם כדי להבטיח שהכל מובן ב-100%.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setActiveTab("history")}
+                      className="mt-4 w-full bg-black/5 hover:bg-[var(--accent)] hover:text-white dark:bg-white/5 text-[var(--text)] text-xs font-extrabold py-2 px-3 rounded-lg transition cursor-pointer text-center"
+                    >
+                      מעבר להיסטוריית שינון
+                    </button>
+                  </div>
+                </div>
+              </div>
+
             </motion.div>
           )}
 
@@ -1853,141 +1916,235 @@ def find_kth_largest(nums, k):
         </footer>
 
       </main>
+    </div>
 
-      {/* FLOATING UP/DOWN SECTION NAVIGATION FOR EASY SCROLLING */}
-      {activeTab === "guide" && (
-        <div className="section-nav">
-          <button 
-            id="secUp" 
-            onClick={() => scrollRelative("up")}
-            title="לסעיף הקודם" 
-            aria-label="לסעיף הקודם"
-          >
-            &#9650;
-          </button>
-          <button 
-            id="secDown" 
-            onClick={() => scrollRelative("down")}
-            title="לסעיף הבא" 
-            aria-label="לסעיף הבא"
-          >
-            &#9660;
-          </button>
-        </div>
-      )}
+    {/* FLOATING UP/DOWN SECTION NAVIGATION FOR EASY SCROLLING */}
+    {activeTab === "guide" && (
+      <div className="section-nav">
+        <button 
+          id="secUp" 
+          onClick={() => scrollRelative("up")}
+          title="לסעיף הקודם" 
+          aria-label="לסעיף הקודם"
+        >
+          <ChevronUp size={20} />
+        </button>
+        <button 
+          id="secDown" 
+          onClick={() => scrollRelative("down")}
+          title="לסעיף הבא" 
+          aria-label="לסעיף הבא"
+        >
+          <ChevronDown size={20} />
+        </button>
+      </div>
+    )}
 
-      {/* INTELLIGENT AI EXPLAIN DIALOG ("אני לא מבין") */}
-      <ExplainDialog
-        isOpen={isExplainOpen}
-        onClose={() => {
-          setIsExplainOpen(false);
-          setHistoryExplainItem(null);
-        }}
-        selectedText={selectedText}
-        contextTitle={contextTitle}
-        user={user}
-        existingItem={historyExplainItem}
-      />
+    {/* INTELLIGENT AI EXPLAIN DIALOG ("אני לא מבין") */}
+    <ExplainDialog
+      isOpen={isExplainOpen}
+      onClose={() => {
+        setIsExplainOpen(false);
+        setHistoryExplainItem(null);
+      }}
+      selectedText={selectedText}
+      contextTitle={contextTitle}
+      user={user}
+      existingItem={historyExplainItem}
+    />
 
-      {/* FLOATING SUPPORT CHAT BOT / WIDGET */}
-      {user && (
-        <>
-          {/* FLOATING CHAT ICON BUTTON */}
-          <button
-            onClick={() => setIsFloatingChatOpen(!isFloatingChatOpen)}
-            className="fixed bottom-6 left-6 z-[9999] bg-[var(--accent)] hover:scale-105 active:scale-95 text-white p-4 rounded-full shadow-2xl flex items-center justify-center gap-2 cursor-pointer transition-all border border-white/10"
-            title="עוזר למידה AI אישי"
-          >
-            <MessageSquare size={20} className={isFloatingChatOpen ? "rotate-90 transition-transform duration-200" : "transition-transform duration-200"} />
-            <span className="hidden md:inline text-xs font-black">צ'אט תמיכה AI 🧠</span>
-          </button>
+    {/* FLOATING SUPPORT CHAT BOT / WIDGET & PROGRESS TRACKER */}
+    {user && (
+      <>
+        {/* FLOATING PROGRESS TRACKER ICON BUTTON */}
+        <button
+          onClick={() => {
+            setIsProgressOpen(!isProgressOpen);
+            setIsFloatingChatOpen(false);
+          }}
+          className="fixed bottom-24 left-6 z-[9999] bg-amber-500 hover:bg-amber-600 hover:scale-110 active:scale-95 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center cursor-pointer transition-all border border-white/10"
+          title="معקב התקדמות אישי"
+        >
+          <Trophy size={22} className={isProgressOpen ? "rotate-12 transition-all duration-200" : "transition-all duration-200"} />
+        </button>
 
-          {/* EXPANDED FLOATING CHAT WINDOW */}
-          <AnimatePresence>
-            {isFloatingChatOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: 30, scale: 0.9 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 30, scale: 0.9 }}
-                transition={{ duration: 0.2 }}
-                className="fixed bottom-24 left-6 z-[9999] w-[580px] max-w-[calc(100vw-32px)] h-[650px] max-h-[calc(100vh-120px)] rounded-2xl shadow-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden flex flex-col"
-              >
-                <CompanionChat user={user} onClose={() => setIsFloatingChatOpen(false)} />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </>
-      )}
+        {/* FLOATING CHAT ICON BUTTON */}
+        <button
+          onClick={() => {
+            setIsFloatingChatOpen(!isFloatingChatOpen);
+            setIsProgressOpen(false);
+          }}
+          className="fixed bottom-6 left-6 z-[9999] bg-[var(--accent)] hover:scale-110 active:scale-95 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center cursor-pointer transition-all border border-white/10"
+          title="עוזר למידה AI אישי"
+        >
+          <MessageSquare size={24} fill="currentColor" className={isFloatingChatOpen ? "rotate-90 transition-all duration-200 text-white" : "transition-all duration-200 text-white"} />
+        </button>
 
-      {/* VIDEO EXPLANATION MODAL */}
-      <AnimatePresence>
-        {activeVideo && (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
-            {/* Backdrop */}
+        {/* EXPANDED FLOATING CHAT WINDOW */}
+        <AnimatePresence>
+          {isFloatingChatOpen && (
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setActiveVideo(null)}
-              className="absolute inset-0 bg-black/85 backdrop-blur-md"
-            />
-
-            {/* Modal Box */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              initial={{ opacity: 0, y: 30, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 30, scale: 0.9 }}
               transition={{ duration: 0.2 }}
-              className="relative bg-[var(--panel)] border border-[var(--border)] rounded-2xl overflow-hidden w-full max-w-3xl shadow-2xl z-10"
+              className="fixed bottom-44 left-6 z-[9999] w-[580px] max-w-[calc(100vw-32px)] h-[650px] max-h-[calc(100vh-120px)] rounded-2xl shadow-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden flex flex-col"
             >
-              {/* Header */}
-              <div className="flex items-center justify-between p-4 border-b border-[var(--border)] bg-black/5">
-                <div className="flex items-center gap-2 text-[var(--accent)] font-bold">
-                  <PlayCircle size={18} />
-                  <span className="text-sm font-black">{activeVideo.title}</span>
+              <CompanionChat user={user} onClose={() => setIsFloatingChatOpen(false)} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* EXPANDED FLOATING PROGRESS TRACKER WINDOW */}
+        <AnimatePresence>
+          {isProgressOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: 30, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 30, scale: 0.9 }}
+              transition={{ duration: 0.2 }}
+              className="fixed bottom-44 left-6 z-[9999] w-[500px] max-w-[calc(100vw-32px)] rounded-2xl shadow-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden flex flex-col p-6 text-right"
+            >
+              <div className="flex items-center justify-between border-b border-[var(--border)] pb-3 mb-4">
+                <div className="flex items-center gap-2 text-amber-500 font-bold">
+                  <Trophy size={18} />
+                  <span className="text-sm font-black">מעקב התקדמות אישי</span>
                 </div>
                 <button
-                  onClick={() => setActiveVideo(null)}
+                  onClick={() => setIsProgressOpen(false)}
                   className="p-1.5 hover:bg-black/10 dark:hover:bg-white/10 rounded-lg text-[var(--muted)] hover:text-[var(--text)] transition cursor-pointer"
                 >
                   <X size={16} />
                 </button>
               </div>
 
-              {/* Video container */}
-              <div className="relative w-full aspect-video bg-black">
-                {(() => {
-                  const embedUrl = getYouTubeEmbedUrl(activeVideo.url);
-                  if (embedUrl) {
-                    return (
-                      <iframe
-                        src={embedUrl}
-                        title={activeVideo.title}
-                        frameBorder="0"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                        allowFullScreen
-                        className="absolute inset-0 w-full h-full"
-                      />
-                    );
-                  } else {
-                    return (
-                      <div className="absolute inset-0 flex items-center justify-center text-xs text-red-500 font-bold">
-                        לא ניתן לטעון את הסרטון בתוך האפליקציה. אנא צפה בו ביוטיוב.
-                      </div>
-                    );
-                  }
-                })()}
+              <p className="text-xs text-[var(--muted)] m-0 mb-4 leading-relaxed">
+                סמן את תבניות הליבה שאתה מרגיש איתן בנוח ושלמדת במדריך, כדי לעקוב אחר מוכנותך.
+              </p>
+
+              {/* Progress bar */}
+              <div className="space-y-2 mb-4">
+                <div className="w-full bg-black/5 dark:bg-white/5 h-3.5 rounded-full overflow-hidden border border-[var(--border)]">
+                  <div 
+                    className="bg-[var(--accent)] h-full transition-all duration-500 ease-out"
+                    style={{ width: `${Math.round((Object.values(completedPatterns).filter(Boolean).length / 8) * 100)}%` }}
+                  />
+                </div>
+                <div className="text-xs font-bold text-[var(--accent)] flex justify-between">
+                  <span>{Object.values(completedPatterns).filter(Boolean).length} מתוך 8 תבניות הושלמו</span>
+                  <span>{Math.round((Object.values(completedPatterns).filter(Boolean).length / 8) * 100)}% מוכנות</span>
+                </div>
               </div>
 
-              {/* Footer */}
-              <div className="p-4 bg-black/5 text-right text-xs text-[var(--muted)] border-t border-[var(--border)]">
-                מקור הסרטון מ-YouTube · פלטפורמת ההכנה מעניקה נגן צף לנוחיות המשתמשים.
+              {/* Scrollable grid of patterns inside dialog */}
+              <div className="grid grid-cols-1 gap-2 overflow-y-auto max-h-[300px] pr-1">
+                {DEFAULT_PATTERNS.map((pat) => {
+                  const isCompleted = !!completedPatterns[pat.id];
+                  return (
+                    <div
+                      key={pat.id}
+                      onClick={() => {
+                        setCompletedPatterns(prev => ({
+                          ...prev,
+                          [pat.id]: !prev[pat.id]
+                        }));
+                      }}
+                      className={`p-3 border rounded-lg text-right flex items-center justify-between gap-3 transition cursor-pointer select-none ${
+                        isCompleted
+                          ? "bg-[var(--accent-tint)] border-[var(--accent)] text-[var(--accent)]"
+                          : "bg-black/5 hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10 border-[var(--border)] text-[var(--text)]"
+                      }`}
+                    >
+                      <div className="overflow-hidden space-y-0.5 animate-none">
+                        <p className="text-xs font-extrabold m-0 truncate">{pat.name}</p>
+                        <p className="text-[10px] text-[var(--muted)] m-0 truncate opacity-85 leading-none">{pat.desc}</p>
+                      </div>
+                      <div className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 transition-all ${
+                        isCompleted
+                          ? "bg-[var(--accent)] border-[var(--accent)] text-white"
+                          : "border-[var(--border)] bg-white dark:bg-black"
+                      }`}>
+                        {isCompleted && <span className="text-xs font-bold">✓</span>}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>
+      </>
+    )}
 
-    </div>
-  );
+    {/* VIDEO EXPLANATION MODAL */}
+    <AnimatePresence>
+      {activeVideo && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setActiveVideo(null)}
+            className="absolute inset-0 bg-black/85 backdrop-blur-md"
+          />
+
+          {/* Modal Box */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            transition={{ duration: 0.2 }}
+            className="relative bg-[var(--panel)] border border-[var(--border)] rounded-2xl overflow-hidden w-full max-w-3xl shadow-2xl z-10"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-[var(--border)] bg-black/5">
+              <div className="flex items-center gap-2 text-[var(--accent)] font-bold">
+                <PlayCircle size={18} />
+                <span className="text-sm font-black">{activeVideo.title}</span>
+              </div>
+              <button
+                onClick={() => setActiveVideo(null)}
+                className="p-1.5 hover:bg-black/10 dark:hover:bg-white/10 rounded-lg text-[var(--muted)] hover:text-[var(--text)] transition cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Video container */}
+            <div className="relative w-full aspect-video bg-black">
+              {(() => {
+                const embedUrl = getYouTubeEmbedUrl(activeVideo.url);
+                if (embedUrl) {
+                  return (
+                    <iframe
+                      src={embedUrl}
+                      title={activeVideo.title}
+                      frameBorder="0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                      className="absolute inset-0 w-full h-full"
+                    />
+                  );
+                } else {
+                  return (
+                    <div className="absolute inset-0 flex items-center justify-center text-xs text-red-500 font-bold">
+                      לא ניתן לטעון את הסרטון בתוך האפליקציה. אנא צפה בו ביוטיוב.
+                    </div>
+                  );
+                }
+              })()}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-black/5 text-right text-xs text-[var(--muted)] border-t border-[var(--border)]">
+              מקור הסרטון מ-YouTube · פלטפורמת ההכנה מעניקה נגן צף לנוחיות המשתמשים.
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+
+  </div>
+);
 }

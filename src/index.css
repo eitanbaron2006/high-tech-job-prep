@@ -81,9 +81,9 @@ body {
 /* Sidebar Styling */
 .sidebar {
   width: 300px;
-  height: 100vh;
+  height: calc(100vh - 4rem);
   position: sticky;
-  top: 0;
+  top: 4rem;
   background: var(--panel);
   border-left: 1px solid var(--border);
   display: flex;
@@ -643,3 +643,50 @@ td.mono.r { color: #dc2626; }
   border-radius: 0.25rem;
   margin-top: 0.75rem;
 }
+
+/* Floating Navigation Buttons on Right Center of Screen */
+.section-nav {
+  position: fixed;
+  right: calc(300px + 1.5rem);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  z-index: 120;
+}
+
+.section-nav button {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 9999px;
+  background: var(--panel);
+  border: 1.5px solid var(--border);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+}
+
+.section-nav button:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+}
+
+.section-nav button:active {
+  transform: translateY(0);
+}
+
+@media (max-width: 1023px) {
+  .section-nav {
+    right: 1.5rem;
+  }
+}
+
