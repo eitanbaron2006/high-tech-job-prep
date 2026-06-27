@@ -2084,7 +2084,7 @@ def find_kth_largest(nums, k):
                       <div className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 transition-all ${
                         isCompleted
                           ? "bg-[var(--accent)] border-[var(--accent)] text-white"
-                          : "border-[var(--border)] bg-white dark:bg-black"
+                          : "border-[var(--border)] bg-[var(--panel)]"
                       }`}>
                         {isCompleted && <span className="text-xs font-bold">✓</span>}
                       </div>

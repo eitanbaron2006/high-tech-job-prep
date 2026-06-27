@@ -335,8 +335,8 @@ export default function CompanionChat({ user, onClose, highThinking: propHighThi
                 <div 
                   className={`companion-chat-bubble p-4 rounded-2xl leading-relaxed text-[0.8rem] shadow-xs ${
                     m.sender === "user"
-                      ? "companion-chat-bubble-user bg-[var(--accent)] text-white rounded-tr-none"
-                      : "bg-[var(--panel)] border border-[var(--border)] text-[var(--text)] rounded-tl-none"
+                      ? "companion-chat-bubble-user bg-[var(--accent)] text-white rounded-tl-none"
+                      : "bg-[var(--panel)] border border-[var(--border)] text-[var(--text)] rounded-tr-none"
                   }`}
                   style={{ fontSize: "0.8rem" }}
                 >
@@ -352,7 +352,7 @@ export default function CompanionChat({ user, onClose, highThinking: propHighThi
                 <div className="w-8 h-8 rounded-full bg-[var(--accent-tint)] text-[var(--accent)] border border-[var(--accent)] flex items-center justify-center shrink-0">
                   <Bot size={16} />
                 </div>
-                <div className="p-4 bg-[var(--panel)] border border-[var(--border)] text-[var(--muted)] rounded-2xl rounded-tl-none flex items-center gap-2 text-xs font-medium shadow-xs">
+                <div className="p-4 bg-[var(--panel)] border border-[var(--border)] text-[var(--muted)] rounded-2xl rounded-tr-none flex items-center gap-2 text-xs font-medium shadow-xs">
                   <Loader2 size={14} className="animate-spin text-[var(--accent)]" />
                   <span>חושב על תשובה מעמיקה ומנסח...</span>
                 </div>
