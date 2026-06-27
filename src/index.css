@@ -388,8 +388,8 @@ button.nav.active {
 }
 p {
   font-size: 0.95rem;
-  line-height: 1.6;
-  margin-bottom: 1rem;
+  /* line-height: 1.6;
+  margin-bottom: 1rem; */
   color: var(--text);
 }
 code.inl {

@@ -31,7 +31,8 @@ import {
   GraduationCap,
   CheckSquare,
   FileText,
-  Video
+  Video,
+  Home
 } from "lucide-react";
 import { auth, loginWithGoogle, logout } from "./firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
@@ -274,13 +275,13 @@ export default function App() {
         {/* Public Header */}
         <header className="sticky top-0 bg-[var(--panel)]/95 backdrop-blur-md border-b border-[var(--border)] z-50">
           <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-lg bg-[var(--accent)] text-white font-extrabold flex items-center justify-center text-base shadow-sm shrink-0 self-center">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-lg bg-[var(--accent)] text-white font-black flex items-center justify-center text-base shadow-sm shrink-0">
                 אל
               </div>
-              <div className="flex flex-col justify-center select-none">
-                <h1 className="font-extrabold text-sm sm:text-base leading-tight text-[var(--text)] m-0 p-0">אלגוריתמים לראיונות</h1>
-                <p className="text-[9px] text-[var(--muted)] leading-none m-0 p-0 mt-1">מדריך הכנה אינטראקטיבי להייטק</p>
+              <div className="flex flex-col justify-center select-none text-right">
+                <h1 className="font-extrabold text-sm sm:text-base leading-none text-[var(--text)] m-0 p-0 mb-1.5">אלגוריתמים לראיונות</h1>
+                <p className="text-[10px] text-[var(--muted)] leading-none m-0 p-0">מדריך הכנה אינטראקטיבי להייטק</p>
               </div>
             </div>
 
@@ -288,23 +289,10 @@ export default function App() {
             <nav className="hidden md:flex items-center gap-2">
               <button
                 onClick={() => {}} 
-                className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-black transition cursor-pointer bg-[var(--accent)] text-white shadow-xs"
+                className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-black transition cursor-pointer bg-[var(--accent)] text-white shadow-xs flex items-center gap-1.5"
               >
-                🏠 בית
-              </button>
-              <button
-                onClick={loginWithGoogle}
-                className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-black transition cursor-pointer text-[var(--text)] hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-1"
-                title="התחבר כדי לגשת למדריך המלא"
-              >
-                📚 מדריך 🔒
-              </button>
-              <button
-                onClick={loginWithGoogle}
-                className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-black transition cursor-pointer text-[var(--text)] hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-1"
-                title="התחבר כדי לגשת להיסטוריית שינון"
-              >
-                ⏳ היסטוריה 🔒
+                <Home size={14} />
+                <span>בית</span>
               </button>
             </nav>
 
@@ -543,13 +531,13 @@ export default function App() {
       <aside className={`sidebar ${sidebarOpen ? "open" : ""}`} id="sidebar">
         
         {/* BRAND */}
-        <div className="brand shrink-0 flex items-center gap-2">
-          <div className="logo flex items-center justify-center shrink-0 self-center">
+        <div className="brand shrink-0 flex items-center gap-2.5">
+          <div className="logo flex items-center justify-center shrink-0">
             אל
           </div>
-          <div className="flex flex-col justify-center select-none">
-            <h1 className="font-extrabold text-base leading-tight text-[var(--text)] m-0 p-0">אלגוריתמים לראיונות</h1>
-            <p className="text-[10px] text-[var(--muted)] leading-none m-0 p-0 mt-1">מדריך הכנה אינטראקטיבי להייטק</p>
+          <div className="flex flex-col justify-center select-none text-right">
+            <h1 className="font-extrabold text-base leading-none text-[var(--text)] m-0 p-0 mb-1.5">אלגוריתמים לראיונות</h1>
+            <p className="text-[10px] text-[var(--muted)] leading-none m-0 p-0">מדריך הכנה אינטראקטיבי להייטק</p>
           </div>
         </div>
 
@@ -677,33 +665,36 @@ export default function App() {
             <div className="flex items-center gap-1 sm:gap-2">
               <button
                 onClick={() => { setActiveTab("home"); setSidebarOpen(false); }}
-                className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-black transition cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-black transition cursor-pointer flex items-center gap-1.5 ${
                   activeTab === "home"
-                    ? "bg-[var(--accent)] text-white shadow-xs font-black"
+                    ? "bg-[var(--accent)] text-white shadow-xs"
                     : "text-[var(--text)] hover:bg-black/5 dark:hover:bg-white/5 font-medium"
                 }`}
               >
-                🏠 בית
+                <Home size={14} />
+                <span>בית</span>
               </button>
               <button
                 onClick={() => { setActiveTab("guide"); setSidebarOpen(false); }}
-                className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-black transition cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-black transition cursor-pointer flex items-center gap-1.5 ${
                   activeTab === "guide"
-                    ? "bg-[var(--accent)] text-white shadow-xs font-black"
+                    ? "bg-[var(--accent)] text-white shadow-xs"
                     : "text-[var(--text)] hover:bg-black/5 dark:hover:bg-white/5 font-medium"
                 }`}
               >
-                📚 מדריך
+                <BookOpen size={14} />
+                <span>מדריך</span>
               </button>
               <button
                 onClick={() => { setActiveTab("history"); setSidebarOpen(false); }}
-                className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-black transition cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-black transition cursor-pointer flex items-center gap-1.5 ${
                   activeTab === "history"
-                    ? "bg-[var(--accent)] text-white shadow-xs font-black"
+                    ? "bg-[var(--accent)] text-white shadow-xs"
                     : "text-[var(--text)] hover:bg-black/5 dark:hover:bg-white/5 font-medium"
                 }`}
               >
-                ⏳ היסטוריה
+                <History size={14} />
+                <span>היסטוריה</span>
               </button>
             </div>
           </div>
