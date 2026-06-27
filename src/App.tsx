@@ -82,6 +82,7 @@ export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [activeTab, setActiveTab] = useState<"home" | "guide" | "history">("guide");
   const [isFloatingChatOpen, setIsFloatingChatOpen] = useState(false);
+  const [highThinking, setHighThinking] = useState(false);
   const [isProgressOpen, setIsProgressOpen] = useState(false);
   const [completedPatterns, setCompletedPatterns] = useState<Record<string, boolean>>(() => {
     try {
@@ -797,6 +798,22 @@ export default function App() {
                   </button>
                 </div>
               </nav>
+            </div>
+
+            {/* High thinking mode toggle */}
+            <div className="px-5 py-2.5 border-t border-[var(--border)] shrink-0 flex flex-col gap-2">
+              <label className="flex items-center gap-2 cursor-pointer select-none justify-start">
+                <input 
+                  type="checkbox" 
+                  checked={highThinking}
+                  onChange={() => setHighThinking(!highThinking)}
+                  className="accent-[var(--accent)] cursor-pointer w-4 h-4 shrink-0"
+                />
+                <span className="text-xs font-black flex items-center gap-1.5 text-[var(--text)] whitespace-nowrap">
+                  <Brain size={14} className="text-[var(--accent)] shrink-0" />
+                  מצב חשיבה גבוהה (Gemini Pro)
+                </span>
+              </label>
             </div>
 
             {/* PDF Full download button remains */}
@@ -1962,8 +1979,8 @@ def find_kth_largest(nums, k):
             setIsProgressOpen(!isProgressOpen);
             setIsFloatingChatOpen(false);
           }}
-          className="fixed bottom-24 left-6 z-[9999] bg-amber-500 hover:bg-amber-600 hover:scale-110 active:scale-95 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center cursor-pointer transition-all border border-white/10"
-          title="معקב התקדמות אישי"
+          className="fixed bottom-6 z-[9999] bg-[var(--accent)] hover:brightness-110 hover:scale-110 active:scale-95 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center cursor-pointer transition-all border border-white/10 right-6 lg:right-[calc(300px+1.5rem)]"
+          title="מעקב התקדמות אישי"
         >
           <Trophy size={22} className={isProgressOpen ? "rotate-12 transition-all duration-200" : "transition-all duration-200"} />
         </button>
@@ -1988,9 +2005,14 @@ def find_kth_largest(nums, k):
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 30, scale: 0.9 }}
               transition={{ duration: 0.2 }}
-              className="fixed bottom-44 left-6 z-[9999] w-[580px] max-w-[calc(100vw-32px)] h-[650px] max-h-[calc(100vh-120px)] rounded-2xl shadow-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden flex flex-col"
+              className="fixed bottom-24 left-6 z-[9999] w-[480px] max-w-[calc(100vw-32px)] h-[520px] max-h-[calc(100vh-120px)] rounded-2xl shadow-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden flex flex-col"
             >
-              <CompanionChat user={user} onClose={() => setIsFloatingChatOpen(false)} />
+              <CompanionChat 
+                user={user} 
+                onClose={() => setIsFloatingChatOpen(false)} 
+                highThinking={highThinking}
+                setHighThinking={setHighThinking}
+              />
             </motion.div>
           )}
         </AnimatePresence>
@@ -2003,7 +2025,7 @@ def find_kth_largest(nums, k):
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 30, scale: 0.9 }}
               transition={{ duration: 0.2 }}
-              className="fixed bottom-44 left-6 z-[9999] w-[500px] max-w-[calc(100vw-32px)] rounded-2xl shadow-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden flex flex-col p-6 text-right"
+              className="fixed bottom-24 z-[9999] w-[500px] max-w-[calc(100vw-32px)] rounded-2xl shadow-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden flex flex-col p-6 text-right right-6 lg:right-[calc(300px+1.5rem)]"
             >
               <div className="flex items-center justify-between border-b border-[var(--border)] pb-3 mb-4">
                 <div className="flex items-center gap-2 text-amber-500 font-bold">

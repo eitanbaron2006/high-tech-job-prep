@@ -22,14 +22,26 @@ interface CompanionChatProps {
   user: User | null;
   onSelectThread?: (thread: ChatThread) => void;
   onClose?: () => void;
+  highThinking?: boolean;
+  setHighThinking?: (val: boolean) => void;
 }
 
-export default function CompanionChat({ user, onClose }: CompanionChatProps) {
+export default function CompanionChat({ user, onClose, highThinking: propHighThinking, setHighThinking: propSetHighThinking }: CompanionChatProps) {
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [highThinking, setHighThinking] = useState(false); // ThinkingLevel.HIGH toggle
+  const [localHighThinking, setLocalHighThinking] = useState(false);
+
+  const isHighThinking = propHighThinking !== undefined ? propHighThinking : localHighThinking;
+  const toggleHighThinking = () => {
+    if (propSetHighThinking) {
+      propSetHighThinking(!isHighThinking);
+    } else {
+      setLocalHighThinking(!isHighThinking);
+    }
+  };
+
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   // Load threads from Firestore or use standard LocalStorage if guest
@@ -167,7 +179,7 @@ export default function CompanionChat({ user, onClose }: CompanionChatProps) {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: apiMessages }),
+        body: JSON.stringify({ messages: apiMessages, highThinking: isHighThinking }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -247,30 +259,16 @@ export default function CompanionChat({ user, onClose }: CompanionChatProps) {
     <div className="flex flex-col h-full w-full bg-[var(--panel)]" dir="rtl">
       
       {/* CHAT HEADER */}
-      <div className="bg-black/5 border-b border-[var(--border)] px-5 py-3 flex items-center justify-between">
+      <div className="bg-[var(--panel)] border-b border-[var(--border)] px-5 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <MessageSquare size={20} className="text-[var(--accent)]" />
-          <h3 className="font-extrabold text-base text-[var(--text)]">AlgoBuddy Chat — צ'אט סימולציה ותמיכה</h3>
+          <h3 className="font-extrabold text-base text-[var(--text)]">AlgoBuddy</h3>
         </div>
         
-        {/* Toggle Mode details */}
-        <div className="flex items-center gap-4">
-          <label className="flex items-center gap-1.5 cursor-pointer select-none">
-            <input 
-              type="checkbox" 
-              checked={highThinking}
-              onChange={() => setHighThinking(!highThinking)}
-              className="accent-[var(--accent)]"
-            />
-            <span className="text-xs font-bold flex items-center gap-1 text-[var(--text)] whitespace-nowrap shrink-0">
-              <BrainCircuit size={13} className="text-[var(--accent)] shrink-0" />
-              מצב חשיבה גבוהה (Gemini Pro)
-            </span>
-          </label>
-
+        <div className="flex items-center gap-2">
           <button
             onClick={() => createNewThread()}
-            className="p-1.5 bg-[var(--accent-tint)] hover:bg-[var(--accent-tint)]/80 text-[var(--accent)] rounded-lg transition"
+            className="p-1.5 bg-[var(--accent-tint)] hover:bg-[var(--accent-tint)]/80 text-[var(--accent)] rounded-lg transition cursor-pointer"
             title="שיחה חדשה"
           >
             <Plus size={16} />
@@ -279,7 +277,7 @@ export default function CompanionChat({ user, onClose }: CompanionChatProps) {
           {onClose && (
             <button
               onClick={onClose}
-              className="p-1.5 hover:bg-black/10 dark:hover:bg-white/10 text-[var(--muted)] hover:text-[var(--text)] rounded-lg transition"
+              className="p-1.5 hover:bg-[var(--accent-tint)] text-[var(--muted)] hover:text-[var(--text)] rounded-lg transition cursor-pointer"
               title="סגור צ'אט"
             >
               <X size={16} />
@@ -291,7 +289,7 @@ export default function CompanionChat({ user, onClose }: CompanionChatProps) {
       <div className="flex-1 flex overflow-hidden">
         
         {/* SIDEBAR THREADS LIST */}
-        <div className="w-[150px] shrink-0 border-l border-[var(--border)] bg-black/[0.025] overflow-y-auto hidden sm:block">
+        <div className="w-[150px] shrink-0 border-l border-[var(--border)] bg-[var(--accent-tint)]/15 overflow-y-auto hidden sm:block">
           <div className="p-3 space-y-1">
             <h4 className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider px-2 mb-2">שיחות קודמות</h4>
             {threads.map((t) => (
@@ -300,8 +298,8 @@ export default function CompanionChat({ user, onClose }: CompanionChatProps) {
                 onClick={() => setActiveThread(t)}
                 className={`group p-2 rounded-lg cursor-pointer text-xs font-medium flex items-center justify-between transition ${
                   activeThread?.id === t.id
-                    ? "bg-[var(--accent-tint)] text-[var(--accent)] border-r-3 border-[var(--accent)]"
-                    : "text-[var(--text)] hover:bg-black/10"
+                    ? "bg-[var(--accent-tint)] text-[var(--accent)] border-r-3 border-[var(--accent)] font-bold"
+                    : "text-[var(--text)] hover:bg-[var(--accent-tint)]/50"
                 }`}
               >
                 <span className="truncate max-w-[100px]">{t.title}</span>
@@ -317,7 +315,7 @@ export default function CompanionChat({ user, onClose }: CompanionChatProps) {
         </div>
 
         {/* MESSAGES CONVERSATION WINDOW */}
-        <div className="flex-1 flex flex-col bg-black/[0.01] dark:bg-white/[0.01] overflow-hidden">
+        <div className="flex-1 flex flex-col bg-[var(--bg)] overflow-hidden">
           
           {/* Messages list */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -335,12 +333,15 @@ export default function CompanionChat({ user, onClose }: CompanionChatProps) {
                   {m.sender === "user" ? <UserIcon size={16} /> : <Bot size={16} />}
                 </div>
 
-                <div className={`p-4 rounded-2xl leading-relaxed text-sm shadow-xs ${
-                  m.sender === "user"
-                    ? "bg-[var(--accent)] text-white rounded-tr-none"
-                    : "bg-[var(--panel)] border border-[var(--border)] text-[var(--text)] rounded-tl-none"
-                }`}>
-                  <div className="prose prose-sm max-w-none text-inherit dark:prose-invert">
+                <div 
+                  className={`companion-chat-bubble p-4 rounded-2xl leading-relaxed text-[0.8rem] shadow-xs ${
+                    m.sender === "user"
+                      ? "bg-[var(--accent)] text-white rounded-tr-none"
+                      : "bg-[var(--panel)] border border-[var(--border)] text-[var(--text)] rounded-tl-none"
+                  }`}
+                  style={{ fontSize: "0.8rem" }}
+                >
+                  <div className="prose prose-sm max-w-none text-inherit dark:prose-invert" style={{ fontSize: "inherit" }}>
                     <ReactMarkdown>{m.text}</ReactMarkdown>
                   </div>
                 </div>
@@ -364,7 +365,7 @@ export default function CompanionChat({ user, onClose }: CompanionChatProps) {
 
           {/* Quick Preset Prompts */}
           {activeThread?.messages.length === 1 && (
-            <div className="p-3 border-t border-[var(--border)] bg-black/5 overflow-x-auto flex gap-2 shrink-0">
+            <div className="p-3 border-t border-[var(--border)] bg-[var(--accent-tint)]/25 overflow-x-auto flex gap-2 shrink-0">
               {presetPrompts.map((p, idx) => (
                 <button
                   key={idx}

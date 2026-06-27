@@ -103,12 +103,12 @@ app.post("/api/tts", async (req, res) => {
 // 3. MULTI-TURN COMPANION CHAT (WITH REAL-TIME INTERVIEW SIMULATION & TIPS)
 app.post("/api/chat", async (req, res) => {
   try {
-    const { messages } = req.body; // Array of { role: 'user'|'model', text: string }
+    const { messages, highThinking } = req.body; // Array of { role: 'user'|'model', text: string }, highThinking flag
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: "Invalid messages format" });
     }
 
-    const systemInstruction = `
+    let systemInstruction = `
       אתה "אלגו-באדי" (AlgoBuddy) - צ'אט בוט חכם, ידידותי ומקצועי המלווה את המשתמש בלמידת אלגוריתמים לראיונות הייטק.
       תפקידך:
       - לענות על שאלות בנושא 8 התבניות שבמדריך (שני מצביעים, חלון מחליק, מפת גיבוב, BFS/DFS, תכנון דינמי, ערימה, חיפוש בינארי, מחסנית מונוטונית).
@@ -117,6 +117,14 @@ app.post("/api/chat", async (req, res) => {
       - תמיד לענות בעברית תומכת, מעצימה ובגובה העיניים.
       - כשהמשתמש מבקש "סימולציה", שאל אותו שאלה מתוך הראיונות (כמו Two Sum, Binary Search, Coin Change, וכו') והנחה אותו צעד אחר צעד לפתור אותה תוך מתן פידבק בונה על הסיבוכיות והחשיבה שלו.
     `;
+
+    if (highThinking) {
+      systemInstruction += `
+      - המשתמש הפעיל "מצב חשיבה גבוהה" (Gemini Pro / High Reasoning).
+      - עליך לספק תשובות מעמיקות, מפורטות ומנותחות בצורה יסודית במיוחד.
+      - בצע חשיבה מעמיקה שלב-אחר-שלב (Chain of Thought), נתח מקרי קצה פוטנציאליים, והשווה בין גישות פתרון שונות (למשל, יעילות זמן מול זיכרון, יתרונות וחסרונות של כל גישה).
+      `;
+    }
 
     // Map frontend formats to SDK parts
     const contents = messages.map((m) => ({

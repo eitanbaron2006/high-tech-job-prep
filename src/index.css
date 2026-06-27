@@ -690,3 +690,16 @@ td.mono.r { color: #dc2626; }
   }
 }
 
+/* Companion Chat styles - enforce font size exactly at 0.8rem for all inner elements to override global p selectors */
+.companion-chat-bubble,
+.companion-chat-bubble p,
+.companion-chat-bubble span,
+.companion-chat-bubble li,
+.companion-chat-bubble pre,
+.companion-chat-bubble code,
+.companion-chat-bubble strong,
+.companion-chat-bubble a {
+  font-size: 0.8rem !important;
+  line-height: 1.6 !important;
+}
+
