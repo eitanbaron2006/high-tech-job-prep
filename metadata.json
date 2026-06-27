@@ -1,0 +1,6 @@
+{
+  "name": "מדריך אלגוריתמים לראיונות הייטק",
+  "description": "מדריך אינטראקטיבי להכנה לראיונות אלגוריתמים עם תמיכה של בינה מלאכותית, סימולציות, צ'אט, והסברים מותאמים אישית בקול ותמונות.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

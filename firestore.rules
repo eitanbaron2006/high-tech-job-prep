@@ -1,0 +1,46 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global safety net: Default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper function to check if the user is logged in
+    function isLoggedIn() {
+      return request.auth != null;
+    }
+
+    // Helper to check ownership of resource
+    function isOwner(userId) {
+      return isLoggedIn() && request.auth.uid == userId;
+    }
+
+    // Helper to check ownership of document property
+    function isDocOwner() {
+      return isLoggedIn() && request.auth.uid == request.resource.data.userId;
+    }
+
+    // Helper to validate IDs to prevent denial-of-wallet resource exhaustion
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId) && isValidId(userId);
+    }
+
+    match /explanations/{explanationId} {
+      allow read, delete: if isLoggedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isLoggedIn() && isDocOwner() && isValidId(explanationId);
+      allow update: if isLoggedIn() && resource.data.userId == request.auth.uid && isDocOwner();
+    }
+
+    match /chats/{chatId} {
+      allow read, delete: if isLoggedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isLoggedIn() && isDocOwner() && isValidId(chatId);
+      allow update: if isLoggedIn() && resource.data.userId == request.auth.uid && isDocOwner();
+    }
+  }
+}
