@@ -43,7 +43,7 @@ export default function ExplainDialog({
   // Audio state
   const [ttsLoading, setTtsLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [ttsProvider, setTtsProvider] = useState<"gemini" | "edge">("gemini");
+  const [ttsProvider, setTtsProvider] = useState<"gemini" | "edge">("edge");
 
   const chunksRef = useRef<string[]>([]);
   const currentChunkIndexRef = useRef<number>(0);
@@ -56,22 +56,14 @@ export default function ExplainDialog({
   const [cachedProvider, setCachedProvider] = useState<"gemini" | "edge">("gemini");
   const [cachedExplanation, setCachedExplanation] = useState<string>("");
 
-  // Image state
-  const [imgPrompt, setImgPrompt] = useState("");
-  const [imgSize, setImgSize] = useState<"1K" | "2K" | "4K">("1K");
-  const [imgLoading, setImgLoading] = useState(false);
-  const [generatedImg, setGeneratedImg] = useState<string | null>(null);
-
-  // Video state
-  const [videoPrompt, setVideoPrompt] = useState("");
-  const [aspectRatio, setAspectRatio] = useState<"16:9" | "9:16">("16:9");
-  const [videoLoading, setVideoLoading] = useState(false);
-  const [videoStatus, setVideoStatus] = useState("");
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [operationName, setOperationName] = useState<string | null>(null);
+  // YouTube state
+  const [youtubeVideoId, setYoutubeVideoId] = useState<string | null>(null);
+  const [youtubeTitle, setYoutubeTitle] = useState("");
+  const [ytLoading, setYtLoading] = useState(false);
 
   const [firestoreId, setFirestoreId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [ttsWarning, setTtsWarning] = useState<string | null>(null);
 
   // Re-run explain generation or load existing item
   useEffect(() => {
@@ -79,8 +71,6 @@ export default function ExplainDialog({
 
     if (existingItem) {
       setExplanation(existingItem.explanationText);
-      setGeneratedImg(existingItem.imageUrl || null);
-      setVideoUrl(existingItem.videoUrl || null);
       setFirestoreId(existingItem.id);
       setLoading(false);
       setError(null);
@@ -89,19 +79,14 @@ export default function ExplainDialog({
 
     // Reset states
     setExplanation("");
-    setGeneratedImg(null);
-    setVideoUrl(null);
-    setOperationName(null);
+    setYoutubeVideoId(null);
     setFirestoreId(null);
     setError(null);
+    setTtsWarning(null);
     stopTTS();
 
-    // Auto-generate default prompts based on selected text
-    const textSnippet = selectedText.length > 50 ? selectedText.substring(0, 50) + "..." : selectedText;
-    setImgPrompt(`Visual explanation diagram of: ${textSnippet}`);
-    setVideoPrompt(`Educational animation showing ${textSnippet}`);
-
     generateExplanation();
+    searchYouTubeVideo();
   }, [isOpen, selectedText, existingItem]);
 
   // Clean up audio on close
@@ -211,6 +196,10 @@ export default function ExplainDialog({
     const data = await res.json();
     if (data.error) throw new Error(data.error);
 
+    if (data.fallback) {
+      setTtsWarning("קריין Gemini אינו נתמך כעת בחשבון הגוגל שלך (הגבלת מודל/מכסה). המערכת העבירה אותך לקריין Edge.");
+    }
+
     const url = `data:${data.mimeType || "audio/wav"};base64,${data.audio}`;
     audioQueueRef.current[index] = url;
     return url;
@@ -254,6 +243,15 @@ export default function ExplainDialog({
 
     if (!isPlayingRef.current) return;
 
+    // Skip empty or invalid audio chunks gracefully
+    const base64Data = url ? url.split(",")[1] : "";
+    if (!base64Data || base64Data === "undefined" || base64Data === "") {
+      console.log(`[TTS Player] Skipping empty chunk ${index}: "${text}"`);
+      currentChunkIndexRef.current++;
+      playNextChunk();
+      return;
+    }
+
     if (audioRef.current) {
       audioRef.current.pause();
     }
@@ -292,6 +290,7 @@ export default function ExplainDialog({
         ? [explanation] 
         : splitTextIntoChunks(explanation);
         
+      console.log("[TTS Player] Built chunks:", chunksRef.current);
       currentChunkIndexRef.current = 0;
       audioQueueRef.current = new Array(chunksRef.current.length).fill(null);
       setCachedProvider(ttsProvider);
@@ -304,125 +303,26 @@ export default function ExplainDialog({
     playNextChunk();
   };
 
-  // Image diagram generator
-  const generateDiagram = async () => {
-    setImgLoading(true);
-    setError(null);
+  // YouTube video search
+  const searchYouTubeVideo = async () => {
+    setYtLoading(true);
+    setYoutubeVideoId(null);
     try {
-      const res = await fetch("/api/generate-image", {
+      const cleanConcept = selectedText.length > 40 ? selectedText.substring(0, 40) : selectedText;
+      const res = await fetch("/api/youtube-search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: imgPrompt, size: imgSize }),
+        body: JSON.stringify({ query: cleanConcept }),
       });
       const data = await res.json();
-      if (data.error) throw new Error(data.error);
-
-      setGeneratedImg(data.imageUrl);
-
-      // Update in firestore if saved
-      if (user && firestoreId) {
-        try {
-          await updateDoc(doc(db, "explanations", firestoreId), {
-            imageUrl: data.imageUrl
-          });
-        } catch (err) {
-          handleFirestoreError(err, OperationType.UPDATE, `explanations/${firestoreId}`);
-        }
+      if (data.videoId) {
+        setYoutubeVideoId(data.videoId);
+        setYoutubeTitle(data.title || "סרטון הדרכה");
       }
-    } catch (err: any) {
-      setError(err.message || "Failed to generate illustration");
+    } catch (err) {
+      console.error("Failed to search YouTube:", err);
     } finally {
-      setImgLoading(false);
-    }
-  };
-
-  // Video generator logic with polling
-  const generateVideo = async () => {
-    setVideoLoading(true);
-    setVideoStatus("מאתחל יצירת סרטון...");
-    setError(null);
-    try {
-      const startRes = await fetch("/api/generate-video", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: videoPrompt, aspectRatio }),
-      });
-      const startData = await startRes.json();
-      if (startData.error) throw new Error(startData.error);
-
-      const opName = startData.operationName;
-      setOperationName(opName);
-
-      // Save operation in firestore
-      if (user && firestoreId) {
-        try {
-          await updateDoc(doc(db, "explanations", firestoreId), {
-            videoOperationName: opName
-          });
-        } catch (err) {
-          handleFirestoreError(err, OperationType.UPDATE, `explanations/${firestoreId}`);
-        }
-      }
-
-      // Start polling
-      pollVideoStatus(opName);
-    } catch (err: any) {
-      setError(err.message || "Failed to generate video");
-      setVideoLoading(false);
-    }
-  };
-
-  const pollVideoStatus = (opName: string) => {
-    let attempts = 0;
-    const interval = setInterval(async () => {
-      attempts++;
-      setVideoStatus(`מייצר סרטון... (${attempts * 5}שנ' חלפו. אנא המתן, יצירת סרטונים ב-AI לוקחת 1-3 דקות)`);
-      try {
-        const checkRes = await fetch("/api/video-status", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ operationName: opName }),
-        });
-        const checkData = await checkRes.json();
-
-        if (checkData.done) {
-          clearInterval(interval);
-          setVideoStatus("הסרטון מוכן! מוריד ומזרים את הקובץ...");
-          downloadVideo(opName);
-        }
-      } catch (err) {
-        console.error("Polling error:", err);
-      }
-    }, 5000);
-  };
-
-  const downloadVideo = async (opName: string) => {
-    try {
-      const dlRes = await fetch("/api/video-download", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ operationName: opName }),
-      });
-      if (!dlRes.ok) throw new Error("Video download failed");
-
-      const blob = await dlRes.blob();
-      const localUrl = URL.createObjectURL(blob);
-      setVideoUrl(localUrl);
-
-      // Save locally/update firestore if required
-      if (user && firestoreId) {
-        try {
-          await updateDoc(doc(db, "explanations", firestoreId), {
-            videoUrl: localUrl
-          });
-        } catch (err) {
-          handleFirestoreError(err, OperationType.UPDATE, `explanations/${firestoreId}`);
-        }
-      }
-    } catch (err: any) {
-      setError("טעינת הסרטון נכשלה: " + err.message);
-    } finally {
-      setVideoLoading(false);
+      setYtLoading(false);
     }
   };
 
@@ -508,6 +408,11 @@ export default function ExplainDialog({
                   {isPlaying ? "עצור הקראה" : "הקרא הסבר בקול"}
                 </button>
               </div>
+              {ttsWarning && (
+                <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-1">
+                  ⚠️ {ttsWarning}
+                </p>
+              )}
             </div>
 
             {loading ? (
@@ -522,135 +427,42 @@ export default function ExplainDialog({
             )}
           </div>
 
-          {/* Interactive media tabs (Image/Video AI generators) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Interactive media tabs (YouTube Video) */}
+          <div className="w-full">
             
-            {/* AI Image Illustration Generator */}
+            {/* YouTube Tutorial Video Card */}
             <div className="bg-white/30 dark:bg-black/5 rounded-xl p-5 border border-[var(--border)] flex flex-col space-y-3">
               <div className="flex items-center gap-2 text-[var(--text)] font-bold">
-                <ImageIcon size={18} className="text-[var(--accent)]" />
-                <span>צור תרשים ויזואלי להסבר (AI Illustration)</span>
+                <VideoIcon size={18} className="text-red-500" />
+                <span>סרטון הדרכה מומלץ (YouTube)</span>
               </div>
               <p className="text-xs text-[var(--muted)]">
-                יצרן תרשימים באמצעות Gemini. הסבר גרפי מדויק לאלגוריתם שבחרת.
+                סרטון הסבר רלוונטי שמצאנו עבורך ב-YouTube להמחשת המושג בצורה פשוטה.
               </p>
 
-              {generatedImg ? (
-                <div className="relative rounded-lg overflow-hidden border border-[var(--border)] bg-black/5">
-                  <img src={generatedImg} alt="AI Diagram" className="w-full h-auto max-h-60 object-contain" referrerPolicy="no-referrer" />
-                  <button 
-                    onClick={() => setGeneratedImg(null)}
-                    className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white p-1.5 rounded-full transition"
-                  >
-                    <X size={14} />
-                  </button>
+              {ytLoading ? (
+                <div className="flex-1 flex flex-col items-center justify-center py-10 text-center space-y-2">
+                  <Loader2 size={24} className="text-red-500 animate-spin" />
+                  <p className="text-xs text-[var(--muted)]">מחפש סרטון מתאים ב-YouTube...</p>
+                </div>
+              ) : youtubeVideoId ? (
+                <div className="relative rounded-lg overflow-hidden border border-[var(--border)] aspect-video bg-black">
+                  <iframe
+                    src={`https://www.youtube.com/embed/${youtubeVideoId}`}
+                    title={youtubeTitle}
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                    className="w-full h-full"
+                  />
                 </div>
               ) : (
-                <div className="space-y-3 pt-2">
-                  <input
-                    type="text"
-                    value={imgPrompt}
-                    onChange={(e) => setImgPrompt(e.target.value)}
-                    placeholder="תיאור התרשים שברצונך ליצור..."
-                    className="w-full text-xs p-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-[var(--text)] outline-none focus:border-[var(--accent)]"
-                  />
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-bold text-[var(--muted)]">רזולוציה:</span>
-                      {(["1K", "2K", "4K"] as const).map((sz) => (
-                        <button
-                          key={sz}
-                          onClick={() => setImgSize(sz)}
-                          className={`px-2 py-1 rounded text-[10px] font-bold transition ${
-                            imgSize === sz
-                              ? "bg-[var(--accent)] text-white"
-                              : "bg-black/5 text-[var(--text)]"
-                          }`}
-                        >
-                          {sz}
-                        </button>
-                      ))}
-                    </div>
-                    <button
-                      onClick={generateDiagram}
-                      disabled={imgLoading || loading}
-                      className="px-4 py-2 bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50"
-                    >
-                      {imgLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-                      צור תרשים
-                    </button>
-                  </div>
+                <div className="py-10 flex flex-col items-center justify-center text-center text-[var(--muted)] space-y-1">
+                  <AlertCircle size={24} className="text-[var(--muted)]" />
+                  <p className="text-xs font-medium">לא נמצא סרטון הדרכה מתאים ב-YouTube</p>
                 </div>
               )}
             </div>
-
-            {/* AI Video Tutorial Generator (VEO) */}
-            <div className="bg-white/30 dark:bg-black/5 rounded-xl p-5 border border-[var(--border)] flex flex-col space-y-3">
-              <div className="flex items-center gap-2 text-[var(--text)] font-bold">
-                <VideoIcon size={18} className="text-[var(--accent)]" />
-                <span>צור סרטון הדרכה באנימציה (AI Video)</span>
-              </div>
-              <p className="text-xs text-[var(--muted)]">
-                יצירת סרטון אנימציה קצר המסביר את החומר בלוח לבן ואינטראקטיבי באמצעות Veo 3.
-              </p>
-
-              {videoUrl ? (
-                <div className="relative rounded-lg overflow-hidden border border-[var(--border)] bg-black/20">
-                  <video src={videoUrl} controls className="w-full h-auto max-h-60 object-contain" />
-                  <button 
-                    onClick={() => setVideoUrl(null)}
-                    className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white p-1.5 rounded-full transition"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              ) : videoLoading ? (
-                <div className="flex-1 flex flex-col items-center justify-center py-6 text-center space-y-2">
-                  <Loader2 size={32} className="text-[var(--accent)] animate-spin" />
-                  <p className="text-xs font-bold text-[var(--text)]">{videoStatus}</p>
-                  <p className="text-[10px] text-[var(--muted)] max-w-xs">
-                    שירות יצירת וידאו של Veo בונה סרטוני המחשה של הייטק. אנא אל תסגור חלון זה.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3 pt-2">
-                  <input
-                    type="text"
-                    value={videoPrompt}
-                    onChange={(e) => setVideoPrompt(e.target.value)}
-                    placeholder="תיאור סרטון ההדרכה..."
-                    className="w-full text-xs p-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-[var(--text)] outline-none focus:border-[var(--accent)]"
-                  />
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-bold text-[var(--muted)]">יחס מסך:</span>
-                      {(["16:9", "9:16"] as const).map((ratio) => (
-                        <button
-                          key={ratio}
-                          onClick={() => setAspectRatio(ratio)}
-                          className={`px-2 py-1 rounded text-[10px] font-bold transition ${
-                            aspectRatio === ratio
-                              ? "bg-[var(--accent)] text-white"
-                              : "bg-black/5 text-[var(--text)]"
-                          }`}
-                        >
-                          {ratio === "16:9" ? "16:9 רוחבי" : "9:16 אורכי"}
-                        </button>
-                      ))}
-                    </div>
-                    <button
-                      onClick={generateVideo}
-                      disabled={videoLoading || loading}
-                      className="px-4 py-2 bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50"
-                    >
-                      <Sparkles size={12} />
-                      צור וידאו
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
           </div>
 
           {/* Non-auth friendly tip */}

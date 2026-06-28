@@ -1,15 +1,7 @@
 import { NextResponse } from "next/server";
-import { GoogleGenAI, GenerateVideosOperation } from "@google/genai";
-
-const apiKey = process.env.GEMINI_API_KEY || "";
-const ai = new GoogleGenAI({
-  apiKey: apiKey,
-  httpOptions: {
-    headers: {
-      "User-Agent": "aistudio-build",
-    },
-  },
-});
+import { ai } from "../../../lib/gemini";
+import { GenerateVideosOperation } from "@google/genai";
+import { GoogleAuth } from "google-auth-library";
 
 export async function POST(req: Request) {
   try {
@@ -22,14 +14,41 @@ export async function POST(req: Request) {
     op.name = operationName;
 
     const updated = await ai.operations.getVideosOperation({ operation: op });
+    const videoBytes = updated.response?.generatedVideos?.[0]?.video?.videoBytes;
     const uri = updated.response?.generatedVideos?.[0]?.video?.uri;
 
+    if (videoBytes) {
+      const buffer = Buffer.from(videoBytes, "base64");
+      return new NextResponse(buffer, {
+        status: 200,
+        headers: {
+          "Content-Type": "video/mp4",
+        },
+      });
+    }
+
     if (!uri) {
-      return NextResponse.json({ error: "Video URI not available yet or operation failed" }, { status: 400 });
+      console.error("[Video Download] Operation failed or has no video data. Details:", JSON.stringify(updated));
+      const errMsg = updated.error?.message || "Video generation operation failed on Google servers";
+      return NextResponse.json({ error: errMsg, details: updated.error }, { status: 400 });
+    }
+
+    let authHeaders = {};
+    const useVertex = process.env.USE_VERTEX_AI === "true" || !!process.env.VERTEX_PROJECT_ID;
+    if (useVertex) {
+      const auth = new GoogleAuth({
+        scopes: "https://www.googleapis.com/auth/cloud-platform",
+      });
+      const client = await auth.getClient();
+      const token = await client.getAccessToken();
+      authHeaders = { "Authorization": `Bearer ${token.token}` };
+    } else {
+      const apiKey = process.env.GEMINI_API_KEY || "";
+      authHeaders = { "x-goog-api-key": apiKey };
     }
 
     const videoRes = await fetch(uri, {
-      headers: { "x-goog-api-key": apiKey },
+      headers: authHeaders,
     });
 
     if (!videoRes.ok) {

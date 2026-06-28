@@ -1,15 +1,5 @@
 import { NextResponse } from "next/server";
-import { GoogleGenAI } from "@google/genai";
-
-const apiKey = process.env.GEMINI_API_KEY || "";
-const ai = new GoogleGenAI({
-  apiKey: apiKey,
-  httpOptions: {
-    headers: {
-      "User-Agent": "aistudio-build",
-    },
-  },
-});
+import { ai, getModelName } from "../../../lib/gemini";
 
 export async function POST(req: Request) {
   try {
@@ -42,7 +32,7 @@ export async function POST(req: Request) {
     }));
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: getModelName("gemini-2.5-flash"),
       contents: contents,
       config: {
         systemInstruction,

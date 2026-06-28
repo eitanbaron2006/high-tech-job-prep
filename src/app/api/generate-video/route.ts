@@ -1,15 +1,5 @@
 import { NextResponse } from "next/server";
-import { GoogleGenAI } from "@google/genai";
-
-const apiKey = process.env.GEMINI_API_KEY || "";
-const ai = new GoogleGenAI({
-  apiKey: apiKey,
-  httpOptions: {
-    headers: {
-      "User-Agent": "aistudio-build",
-    },
-  },
-});
+import { getAiClient, getModelName } from "../../../lib/gemini";
 
 export async function POST(req: Request) {
   try {
@@ -19,16 +9,33 @@ export async function POST(req: Request) {
     }
 
     const resolvedAspectRatio = aspectRatio === "9:16" ? "9:16" : "16:9";
+    let operation;
 
-    const operation = await ai.models.generateVideos({
-      model: "veo-3.1-fast-generate-preview",
-      prompt: `An elegant software engineering tutorial video about: ${prompt}. Minimalistic whiteboard style, simple clean animation detailing the algorithm with orange and black accents. Highly professional.`,
-      config: {
-        numberOfVideos: 1,
-        resolution: "720p",
-        aspectRatio: resolvedAspectRatio,
-      },
-    });
+    try {
+      const client = getAiClient(false); // Try Vertex AI
+      operation = await client.models.generateVideos({
+        model: getModelName("veo-3.1-fast-generate-preview", false),
+        prompt: `An elegant software engineering tutorial video about: ${prompt}. Minimalistic whiteboard style, simple clean animation detailing the algorithm with orange and black accents. Highly professional.`,
+        config: {
+          numberOfVideos: 1,
+          resolution: "720p",
+          aspectRatio: resolvedAspectRatio,
+        },
+      });
+    } catch (vertexErr: any) {
+      console.warn("[Video Generation] Vertex AI failed, falling back to AI Studio. Error:", vertexErr.message || vertexErr);
+      
+      const client = getAiClient(true); // Force AI Studio
+      operation = await client.models.generateVideos({
+        model: getModelName("veo-3.1-fast-generate-preview", true),
+        prompt: `An elegant software engineering tutorial video about: ${prompt}. Minimalistic whiteboard style, simple clean animation detailing the algorithm with orange and black accents. Highly professional.`,
+        config: {
+          numberOfVideos: 1,
+          resolution: "720p",
+          aspectRatio: resolvedAspectRatio,
+        },
+      });
+    }
 
     return NextResponse.json({ operationName: operation.name });
   } catch (error: any) {

@@ -1,15 +1,5 @@
 import { NextResponse } from "next/server";
-import { GoogleGenAI } from "@google/genai";
-
-const apiKey = process.env.GEMINI_API_KEY || "";
-const ai = new GoogleGenAI({
-  apiKey: apiKey,
-  httpOptions: {
-    headers: {
-      "User-Agent": "aistudio-build",
-    },
-  },
-});
+import { ai, getModelName } from "../../../lib/gemini";
 
 export async function POST(req: Request) {
   try {
@@ -35,7 +25,7 @@ export async function POST(req: Request) {
     const prompt = `הטקסט שסימנתי ולא הבנתי הוא:\n"${selectedText}"\nאנא הסבר לי אותו בצורה ברורה וידידותית יותר.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: getModelName("gemini-2.5-flash"),
       contents: prompt,
       config: {
         systemInstruction,

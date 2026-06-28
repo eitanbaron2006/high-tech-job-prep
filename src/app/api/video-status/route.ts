@@ -1,15 +1,6 @@
 import { NextResponse } from "next/server";
-import { GoogleGenAI, GenerateVideosOperation } from "@google/genai";
-
-const apiKey = process.env.GEMINI_API_KEY || "";
-const ai = new GoogleGenAI({
-  apiKey: apiKey,
-  httpOptions: {
-    headers: {
-      "User-Agent": "aistudio-build",
-    },
-  },
-});
+import { ai } from "../../../lib/gemini";
+import { GenerateVideosOperation } from "@google/genai";
 
 export async function POST(req: Request) {
   try {
