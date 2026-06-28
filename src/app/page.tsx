@@ -1,3 +1,4 @@
+"use client";
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
@@ -34,13 +35,13 @@ import {
   Video,
   Home
 } from "lucide-react";
-import { auth, loginWithGoogle, logout } from "./firebase";
+import { auth, loginWithGoogle, logout } from "../firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { puzzlesData } from "./puzzlesData";
-import { ExplanationItem, ChatThread } from "./types";
-import ExplainDialog from "./components/ExplainDialog";
-import CompanionChat from "./components/CompanionChat";
-import HistoryPanel from "./components/HistoryPanel";
+import { puzzlesData } from "../puzzlesData";
+import { ExplanationItem, ChatThread } from "../types";
+import ExplainDialog from "../components/ExplainDialog";
+import CompanionChat from "../components/CompanionChat";
+import HistoryPanel from "../components/HistoryPanel";
 
 const DEFAULT_PATTERNS = [
   { id: "two-pointers", name: "שני מצביעים", desc: "Two Pointers - מעבר יעיל משני קצוות המערך" },
