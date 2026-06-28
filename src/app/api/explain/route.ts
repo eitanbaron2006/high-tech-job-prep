@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     const prompt = `הטקסט שסימנתי ולא הבנתי הוא:\n"${selectedText}"\nאנא הסבר לי אותו בצורה ברורה וידידותית יותר.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: prompt,
       config: {
         systemInstruction,

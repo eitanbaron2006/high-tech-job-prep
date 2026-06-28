@@ -43,13 +43,8 @@ export default function ExplainDialog({
   // Audio state
   const [ttsLoading, setTtsLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-
-  const chunksRef = useRef<string[]>([]);
-  const currentChunkIndexRef = useRef<number>(0);
-  const audioQueueRef = useRef<(string | null)[]>([]);
-  const isPlayingRef = useRef<boolean>(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Image state
   const [imgPrompt, setImgPrompt] = useState("");
@@ -76,6 +71,11 @@ export default function ExplainDialog({
       setExplanation(existingItem.explanationText);
       setGeneratedImg(existingItem.imageUrl || null);
       setVideoUrl(existingItem.videoUrl || null);
+      if (existingItem.audioBase64) {
+        setAudioUrl(`data:audio/wav;base64,${existingItem.audioBase64}`);
+      } else {
+        setAudioUrl(null);
+      }
       setFirestoreId(existingItem.id);
       setLoading(false);
       setError(null);
@@ -84,12 +84,13 @@ export default function ExplainDialog({
 
     // Reset states
     setExplanation("");
+    setAudioUrl(null);
     setGeneratedImg(null);
     setVideoUrl(null);
     setOperationName(null);
     setFirestoreId(null);
     setError(null);
-    stopTTS();
+    setIsPlaying(false);
 
     // Auto-generate default prompts based on selected text
     const textSnippet = selectedText.length > 50 ? selectedText.substring(0, 50) + "..." : selectedText;
@@ -102,7 +103,9 @@ export default function ExplainDialog({
   // Clean up audio on close
   useEffect(() => {
     return () => {
-      stopTTS();
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
     };
   }, []);
 
@@ -151,142 +154,54 @@ export default function ExplainDialog({
     }
   };
 
-  // Helper to split text into readable chunks for TTS
-  const splitTextIntoChunks = (text: string): string[] => {
-    const paragraphs = text.split(/\n+/);
-    const chunks: string[] = [];
-    
-    for (const para of paragraphs) {
-      const cleanPara = para.trim().replace(/[*_#`~[\]()]/g, "").replace(/<[^>]*>/g, "");
-      if (!cleanPara) continue;
-      
-      if (cleanPara.length > 350) {
-        const sentences = cleanPara.split(/(?<=[.!?])\s+/);
-        let currentChunk = "";
-        for (const sentence of sentences) {
-          if ((currentChunk + sentence).length > 350) {
-            if (currentChunk) chunks.push(currentChunk.trim());
-            currentChunk = sentence;
-          } else {
-            currentChunk += " " + sentence;
-          }
-        }
-        if (currentChunk) chunks.push(currentChunk.trim());
-      } else {
-        chunks.push(cleanPara);
-      }
-    }
-    return chunks;
-  };
-
-  const stopTTS = () => {
-    isPlayingRef.current = false;
-    setIsPlaying(false);
-    setTtsLoading(false);
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-  };
-
-  const fetchChunkTTS = async (text: string, index: number): Promise<string> => {
-    if (audioQueueRef.current[index]) {
-      return audioQueueRef.current[index]!;
-    }
-
-    const res = await fetch("/api/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-      signal: abortControllerRef.current?.signal,
-    });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-
-    const url = `data:audio/wav;base64,${data.audio}`;
-    audioQueueRef.current[index] = url;
-    return url;
-  };
-
-  const prefetchNextChunks = () => {
-    const currentIndex = currentChunkIndexRef.current;
-    for (let i = 1; i <= 2; i++) {
-      const nextIndex = currentIndex + i;
-      if (nextIndex < chunksRef.current.length && !audioQueueRef.current[nextIndex]) {
-        fetchChunkTTS(chunksRef.current[nextIndex], nextIndex).catch((err) => {
-          console.error(`Failed to prefetch chunk ${nextIndex}:`, err);
-        });
-      }
-    }
-  };
-
-  const playNextChunk = async () => {
-    if (!isPlayingRef.current) return;
-
-    const index = currentChunkIndexRef.current;
-    if (index >= chunksRef.current.length) {
-      stopTTS();
-      return;
-    }
-
-    const text = chunksRef.current[index];
-    let url = audioQueueRef.current[index];
-    
-    if (!url) {
-      setTtsLoading(true);
-      try {
-        url = await fetchChunkTTS(text, index);
-        setTtsLoading(false);
-      } catch (err: any) {
-        if (err.name === "AbortError") return;
-        setError(err.message || "TTS Chunk failed");
-        stopTTS();
-        return;
-      }
-    }
-
-    if (!isPlayingRef.current) return;
-
-    if (audioRef.current) {
-      audioRef.current.pause();
-    }
-    
-    audioRef.current = new Audio(url);
-    audioRef.current.play();
-    
-    audioRef.current.onended = () => {
-      currentChunkIndexRef.current++;
-      playNextChunk();
-    };
-
-    audioRef.current.onerror = (e) => {
-      console.error("Audio playback error:", e);
-      currentChunkIndexRef.current++;
-      playNextChunk();
-    };
-
-    prefetchNextChunks();
-  };
-
+  // Text to Speech
   const playTTS = async () => {
-    if (isPlaying) {
-      stopTTS();
+    if (isPlaying && audioRef.current) {
+      audioRef.current.pause();
+      setIsPlaying(false);
       return;
     }
 
-    if (!explanation) return;
+    if (audioUrl) {
+      playAudio(audioUrl);
+      return;
+    }
 
-    abortControllerRef.current = new AbortController();
-    chunksRef.current = splitTextIntoChunks(explanation);
-    currentChunkIndexRef.current = 0;
-    audioQueueRef.current = new Array(chunksRef.current.length).fill(null);
-    isPlayingRef.current = true;
+    setTtsLoading(true);
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: explanation }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      const url = `data:${data.mimeType || "audio/wav"};base64,${data.audio}`;
+      setAudioUrl(url);
+
+      // Note: We DO NOT save to Firestore here to avoid the 1MB document limit.
+      // The audio is kept in-memory for this session.
+
+      playAudio(url);
+    } catch (err: any) {
+      setError(err.message || "TTS Speech failed");
+    } finally {
+      setTtsLoading(false);
+    }
+  };
+
+  const playAudio = (url: string) => {
+    if (audioRef.current) {
+      audioRef.current.src = url;
+    } else {
+      audioRef.current = new Audio(url);
+    }
+    audioRef.current.play();
     setIsPlaying(true);
-
-    playNextChunk();
+    audioRef.current.onended = () => {
+      setIsPlaying(false);
+    };
   };
 
   // Image diagram generator
