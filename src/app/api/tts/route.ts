@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI, Modality } from "@google/genai";
+import { Communicate } from "edge-tts-universal";
 
 const apiKey = process.env.GEMINI_API_KEY || "";
 const ai = new GoogleGenAI({
@@ -34,7 +35,7 @@ function addWavHeader(pcmBuffer: Buffer, sampleRate: number): Buffer {
 
 export async function POST(req: Request) {
   try {
-    const { text } = await req.json();
+    const { text, provider } = await req.json();
     if (!text) {
       return NextResponse.json({ error: "No text provided for TTS" }, { status: 400 });
     }
@@ -44,6 +45,48 @@ export async function POST(req: Request) {
       .replace(/<[^>]*>/g, "")
       .substring(0, 5000); // safety length limit for speech
 
+    if (provider === "edge") {
+      let chunks: any[] = [];
+      const attempts = 3;
+      let delayMs = 150;
+
+      for (let i = 0; i < attempts; i++) {
+        try {
+          const comm = new Communicate(cleanText, {
+            voice: "he-IL-HilaNeural",
+          });
+
+          chunks = [];
+          for await (const chunk of comm.stream()) {
+            if (chunk.type === "audio") {
+              chunks.push(chunk.data);
+            }
+          }
+
+          if (chunks.length > 0) {
+            break; // Success
+          }
+        } catch (streamErr) {
+          console.warn(`Edge TTS attempt ${i + 1} failed:`, streamErr);
+          if (i === attempts - 1) {
+            throw streamErr; // Throw if last attempt fails
+          }
+          await new Promise((res) => setTimeout(res, delayMs));
+          delayMs *= 2; // Exponential backoff
+        }
+      }
+
+      if (chunks.length === 0) {
+        throw new Error("No audio chunks returned from Edge TTS");
+      }
+
+      const buffer = Buffer.concat(chunks);
+      const base64Audio = buffer.toString("base64");
+
+      return NextResponse.json({ audio: base64Audio, mimeType: "audio/mpeg" });
+    }
+
+    // Default: Gemini TTS
     const response = await ai.models.generateContent({
       model: "gemini-3.1-flash-tts-preview",
       contents: [{ parts: [{ text: `Say clearly in a professional and friendly tone: ${cleanText}` }] }],

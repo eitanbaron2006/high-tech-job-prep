@@ -120,7 +120,7 @@ export default function App() {
 
   // Selection states
   const [selectedText, setSelectedText] = useState("");
-  const [selectionCoords, setSelectionCoords] = useState<{ x: number; y: number } | null>(null);
+  const [contextMenuCoords, setContextMenuCoords] = useState<{ x: number; y: number } | null>(null);
   const [isExplainOpen, setIsExplainOpen] = useState(false);
   const [contextTitle, setContextTitle] = useState("מדריך אלגוריתמים לראיונות");
 
@@ -165,18 +165,21 @@ export default function App() {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
-  // Document selection change listener to trigger "אני לא מבין"
+  // Context menu listener on right click for text selection
   useEffect(() => {
-    const handleSelection = () => {
+    const handleContextMenu = (e: MouseEvent) => {
+      if (activeTab !== "guide") return;
+
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || !sel.toString().trim()) {
-        setSelectionCoords(null);
+        setContextMenuCoords(null);
         return;
       }
       const text = sel.toString().trim();
       
       // We only offer explain for sentences/phrases of reasonable length
       if (text.length > 6 && text.length < 1500) {
+        e.preventDefault(); // Prevent standard browser context menu
         setSelectedText(text);
         
         // Try to identify which section the user selected in
@@ -191,28 +194,26 @@ export default function App() {
         }
         setContextTitle(matchedSection);
 
-        try {
-          const range = sel.getRangeAt(0);
-          const rect = range.getBoundingClientRect();
-          setSelectionCoords({
-            x: rect.left + window.scrollX + rect.width / 2,
-            y: rect.top + window.scrollY - 46
-          });
-        } catch (e) {
-          // Fallback if coordinate bounding box fails in standard browser context
-          setSelectionCoords({
-            x: window.innerWidth / 2,
-            y: window.scrollY + 200
-          });
-        }
+        // Position the context menu at the mouse coordinates
+        setContextMenuCoords({
+          x: e.pageX,
+          y: e.pageY
+        });
       }
     };
 
-    document.addEventListener("mouseup", handleSelection);
-    return () => {
-      document.removeEventListener("mouseup", handleSelection);
+    const handleCloseMenu = () => {
+      setContextMenuCoords(null);
     };
-  }, []);
+
+    document.addEventListener("contextmenu", handleContextMenu);
+    document.addEventListener("click", handleCloseMenu);
+
+    return () => {
+      document.removeEventListener("contextmenu", handleContextMenu);
+      document.removeEventListener("click", handleCloseMenu);
+    };
+  }, [activeTab]);
 
   // Set active section on scroll 
   useEffect(() => {
@@ -590,26 +591,30 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] transition-colors duration-300 flex flex-col" dir="rtl">
       
-      {/* FLOATING IN-CONTEXT TRIGGER BUTTON */}
-      {selectionCoords && activeTab === "guide" && (
-        <button
+      {/* CUSTOM CONTEXT MENU */}
+      {contextMenuCoords && activeTab === "guide" && (
+        <div
           style={{
             position: "absolute",
-            top: `${selectionCoords.y}px`,
-            left: `${selectionCoords.x}px`,
-            transform: "translateX(-50%)",
+            top: `${contextMenuCoords.y}px`,
+            left: `${contextMenuCoords.x}px`,
             zIndex: 9999,
           }}
-          onClick={() => {
-            setHistoryExplainItem(null); // Fresh explain
-            setIsExplainOpen(true);
-            setSelectionCoords(null);
-          }}
-          className="bg-[var(--accent)] text-white text-xs font-black px-4 py-2 rounded-full flex items-center gap-1.5 shadow-xl hover:scale-105 active:scale-95 transition cursor-pointer"
+          className="bg-[var(--panel)] border border-[var(--border)] rounded-lg shadow-2xl py-1.5 min-w-[160px] animate-in fade-in zoom-in-95 duration-150 select-none text-right"
+          onClick={(e) => e.stopPropagation()}
         >
-          <Sparkles size={13} className="animate-pulse" />
-          <span>אני לא מבין 🧠</span>
-        </button>
+          <button
+            onClick={() => {
+              setHistoryExplainItem(null); // Fresh explain
+              setIsExplainOpen(true);
+              setContextMenuCoords(null);
+            }}
+            className="w-full text-right px-4 py-2 text-xs font-bold text-[var(--text)] hover:bg-[var(--accent)] hover:text-white transition flex items-center justify-between gap-3 cursor-pointer"
+          >
+            <span>אני לא מבין 🧠</span>
+            <span className="text-[10px] opacity-60">הסבר AI</span>
+          </button>
+        </div>
       )}
 
       {/* GLOBAL STICKY HEADER FOR LOGGED-IN USERS */}

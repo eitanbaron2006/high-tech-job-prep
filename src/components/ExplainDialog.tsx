@@ -43,8 +43,18 @@ export default function ExplainDialog({
   // Audio state
   const [ttsLoading, setTtsLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [ttsProvider, setTtsProvider] = useState<"gemini" | "edge">("gemini");
+
+  const chunksRef = useRef<string[]>([]);
+  const currentChunkIndexRef = useRef<number>(0);
+  const audioQueueRef = useRef<(string | null)[]>([]);
+  const isPlayingRef = useRef<boolean>(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Keep track of provider and explanation for the cached audio
+  const [cachedProvider, setCachedProvider] = useState<"gemini" | "edge">("gemini");
+  const [cachedExplanation, setCachedExplanation] = useState<string>("");
 
   // Image state
   const [imgPrompt, setImgPrompt] = useState("");
@@ -71,11 +81,6 @@ export default function ExplainDialog({
       setExplanation(existingItem.explanationText);
       setGeneratedImg(existingItem.imageUrl || null);
       setVideoUrl(existingItem.videoUrl || null);
-      if (existingItem.audioBase64) {
-        setAudioUrl(`data:audio/wav;base64,${existingItem.audioBase64}`);
-      } else {
-        setAudioUrl(null);
-      }
       setFirestoreId(existingItem.id);
       setLoading(false);
       setError(null);
@@ -84,13 +89,12 @@ export default function ExplainDialog({
 
     // Reset states
     setExplanation("");
-    setAudioUrl(null);
     setGeneratedImg(null);
     setVideoUrl(null);
     setOperationName(null);
     setFirestoreId(null);
     setError(null);
-    setIsPlaying(false);
+    stopTTS();
 
     // Auto-generate default prompts based on selected text
     const textSnippet = selectedText.length > 50 ? selectedText.substring(0, 50) + "..." : selectedText;
@@ -103,9 +107,7 @@ export default function ExplainDialog({
   // Clean up audio on close
   useEffect(() => {
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
+      stopTTS();
     };
   }, []);
 
@@ -154,54 +156,152 @@ export default function ExplainDialog({
     }
   };
 
-  // Text to Speech
-  const playTTS = async () => {
-    if (isPlaying && audioRef.current) {
+  // Helper to split text into readable chunks for TTS (only used for Edge)
+  const splitTextIntoChunks = (text: string): string[] => {
+    const paragraphs = text.split(/\n+/);
+    const chunks: string[] = [];
+    
+    for (const para of paragraphs) {
+      const cleanPara = para.trim().replace(/[*_#`~[\]()]/g, "").replace(/<[^>]*>/g, "");
+      if (!cleanPara) continue;
+      
+      if (cleanPara.length > 350) {
+        const sentences = cleanPara.split(/(?<=[.!?])\s+/);
+        let currentChunk = "";
+        for (const sentence of sentences) {
+          if ((currentChunk + sentence).length > 350) {
+            if (currentChunk) chunks.push(currentChunk.trim());
+            currentChunk = sentence;
+          } else {
+            currentChunk += " " + sentence;
+          }
+        }
+        if (currentChunk) chunks.push(currentChunk.trim());
+      } else {
+        chunks.push(cleanPara);
+      }
+    }
+    return chunks;
+  };
+
+  const stopTTS = () => {
+    isPlayingRef.current = false;
+    setIsPlaying(false);
+    setTtsLoading(false);
+    if (audioRef.current) {
       audioRef.current.pause();
-      setIsPlaying(false);
-      return;
+      audioRef.current = null;
     }
-
-    if (audioUrl) {
-      playAudio(audioUrl);
-      return;
-    }
-
-    setTtsLoading(true);
-    try {
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: explanation }),
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-
-      const url = `data:${data.mimeType || "audio/wav"};base64,${data.audio}`;
-      setAudioUrl(url);
-
-      // Note: We DO NOT save to Firestore here to avoid the 1MB document limit.
-      // The audio is kept in-memory for this session.
-
-      playAudio(url);
-    } catch (err: any) {
-      setError(err.message || "TTS Speech failed");
-    } finally {
-      setTtsLoading(false);
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
   };
 
-  const playAudio = (url: string) => {
-    if (audioRef.current) {
-      audioRef.current.src = url;
-    } else {
-      audioRef.current = new Audio(url);
+  const fetchChunkTTS = async (text: string, index: number): Promise<string> => {
+    if (audioQueueRef.current[index]) {
+      return audioQueueRef.current[index]!;
     }
+
+    const res = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, provider: ttsProvider }),
+      signal: abortControllerRef.current?.signal,
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    const url = `data:${data.mimeType || "audio/wav"};base64,${data.audio}`;
+    audioQueueRef.current[index] = url;
+    return url;
+  };
+
+  const prefetchNextChunks = () => {
+    if (ttsProvider !== "edge") return;
+    
+    const nextIndex = currentChunkIndexRef.current + 1;
+    if (nextIndex < chunksRef.current.length && !audioQueueRef.current[nextIndex]) {
+      fetchChunkTTS(chunksRef.current[nextIndex], nextIndex).catch((err) => {
+        console.error(`Failed to prefetch chunk ${nextIndex}:`, err);
+      });
+    }
+  };
+
+  const playNextChunk = async () => {
+    if (!isPlayingRef.current) return;
+
+    const index = currentChunkIndexRef.current;
+    if (index >= chunksRef.current.length) {
+      stopTTS();
+      return;
+    }
+
+    const text = chunksRef.current[index];
+    let url = audioQueueRef.current[index];
+    
+    if (!url) {
+      setTtsLoading(true);
+      try {
+        url = await fetchChunkTTS(text, index);
+        setTtsLoading(false);
+      } catch (err: any) {
+        if (err.name === "AbortError") return;
+        setError(err.message || "TTS Chunk failed");
+        stopTTS();
+        return;
+      }
+    }
+
+    if (!isPlayingRef.current) return;
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+    
+    audioRef.current = new Audio(url);
     audioRef.current.play();
-    setIsPlaying(true);
+    
     audioRef.current.onended = () => {
-      setIsPlaying(false);
+      currentChunkIndexRef.current++;
+      playNextChunk();
     };
+
+    audioRef.current.onerror = (e) => {
+      console.error("Audio playback error:", e);
+      currentChunkIndexRef.current++;
+      playNextChunk();
+    };
+
+    prefetchNextChunks();
+  };
+
+  const playTTS = async () => {
+    if (isPlaying) {
+      stopTTS();
+      return;
+    }
+
+    if (!explanation) return;
+
+    abortControllerRef.current = new AbortController();
+    
+    const isCacheValid = cachedProvider === ttsProvider && cachedExplanation === explanation;
+    
+    if (!isCacheValid) {
+      chunksRef.current = ttsProvider === "gemini" 
+        ? [explanation] 
+        : splitTextIntoChunks(explanation);
+        
+      currentChunkIndexRef.current = 0;
+      audioQueueRef.current = new Array(chunksRef.current.length).fill(null);
+      setCachedProvider(ttsProvider);
+      setCachedExplanation(explanation);
+    }
+
+    isPlayingRef.current = true;
+    setIsPlaying(true);
+
+    playNextChunk();
   };
 
   // Image diagram generator
@@ -378,24 +478,36 @@ export default function ExplainDialog({
               </h4>
 
               {/* TTS Action */}
-              <button
-                onClick={playTTS}
-                disabled={loading || ttsLoading}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition ${
-                  isPlaying 
-                    ? "bg-red-500 text-white" 
-                    : "bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white"
-                } disabled:opacity-50`}
-              >
-                {ttsLoading ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : isPlaying ? (
-                  <Square size={14} />
-                ) : (
-                  <Volume2 size={14} />
-                )}
-                {isPlaying ? "עצור הקראה" : "הקרא הסבר בקול"}
-              </button>
+              <div className="flex items-center gap-2">
+                <select
+                  value={ttsProvider}
+                  onChange={(e) => setTtsProvider(e.target.value as "gemini" | "edge")}
+                  disabled={isPlaying || ttsLoading}
+                  className="bg-black/5 dark:bg-white/5 border border-[var(--border)] text-xs rounded-lg px-2 py-1.5 outline-none text-[var(--text)] font-semibold transition hover:border-[var(--accent)] focus:border-[var(--accent)] disabled:opacity-50 cursor-pointer"
+                >
+                  <option value="gemini">קריין Gemini (איכותי)</option>
+                  <option value="edge">קריין Edge (חופשי ומהיר)</option>
+                </select>
+
+                <button
+                  onClick={playTTS}
+                  disabled={loading || ttsLoading}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition ${
+                    isPlaying 
+                      ? "bg-red-500 text-white" 
+                      : "bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white"
+                  } disabled:opacity-50`}
+                >
+                  {ttsLoading ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : isPlaying ? (
+                    <Square size={14} />
+                  ) : (
+                    <Volume2 size={14} />
+                  )}
+                  {isPlaying ? "עצור הקראה" : "הקרא הסבר בקול"}
+                </button>
+              </div>
             </div>
 
             {loading ? (

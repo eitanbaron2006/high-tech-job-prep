@@ -12,6 +12,7 @@
   "dependencies": {
     "@google/genai": "^2.4.0",
     "@tailwindcss/postcss": "^4.3.1",
+    "edge-tts-universal": "^1.4.0",
     "firebase": "^12.15.0",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
