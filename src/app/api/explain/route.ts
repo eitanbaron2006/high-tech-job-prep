@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
 import { ai, getModelName } from "../../../lib/gemini";
+import {
+  buildExplainGenerationConfig,
+  buildExplainSystemInstruction,
+  ensureExplanationComplete,
+  isExplanationTruncated,
+  stripLeadingAcknowledgement,
+} from "./explain-helpers";
 
 export async function POST(req: Request) {
   try {
@@ -8,31 +15,34 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No text selected" }, { status: 400 });
     }
 
-    const systemInstruction = `
-      אתה מנטור אלגוריתמים מומחה ומראיין הייטק בכיר.
-      המשתמש סימן קטע טקסט שהוא לא הבין מתוך מדריך הכנה לראיונות הייטק, ומבקש הסבר פשוט, ידידותי, מעשי וברור יותר.
-      הנושא הכללי של הקטע הוא: ${contextTitle || "אלגוריתמים לראיונות"}.
-      
-      ענה בעברית רהוטה ומקצועית, אך בגובה העיניים ובסגנון מעודד.
-      השתמש במבנה הבא:
-      1. **הסבר פשוט ואינטואיטיבי (ללא קוד)** - השתמש באנלוגיה מחיי היומיום כדי להסביר את הרעיון.
-      2. **למה זה חשוב בראיונות** - מה המראיין מחפש לראות כשהוא שואל על זה.
-      3. **דוגמה מעשית/פרקטית** - הסבר קצר של צעד אחר צעד על מקרה פשוט.
-      
-      עצב את התשובה בצורת Markdown יפה עם כותרות ברורות ורווחים.
-    `;
+    const systemInstruction = buildExplainSystemInstruction(contextTitle);
 
     const prompt = `הטקסט שסימנתי ולא הבנתי הוא:\n"${selectedText}"\nאנא הסבר לי אותו בצורה ברורה וידידותית יותר.`;
 
-    const response = await ai.models.generateContent({
+    let response = await ai.models.generateContent({
       model: getModelName("gemini-2.5-flash"),
       contents: prompt,
       config: {
         systemInstruction,
+        ...buildExplainGenerationConfig(),
       },
     });
 
-    return NextResponse.json({ explanation: response.text });
+    if (isExplanationTruncated(response)) {
+      console.warn("[Explain] Gemini response hit max output tokens, retrying with larger budget.");
+      response = await ai.models.generateContent({
+        model: getModelName("gemini-2.5-flash"),
+        contents: `${prompt}\n\nחשוב: כתוב תשובה שלמה, קצרה ומסודרת. אל תעצור באמצע משפט.`,
+        config: {
+          systemInstruction,
+          ...buildExplainGenerationConfig(true),
+        },
+      });
+    }
+
+    ensureExplanationComplete(response);
+
+    return NextResponse.json({ explanation: stripLeadingAcknowledgement(response.text || "") });
   } catch (error: any) {
     console.error("Error in explain:", error);
     return NextResponse.json({ error: error.message || "Failed to generate explanation" }, { status: 500 });

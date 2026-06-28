@@ -50,6 +50,20 @@ body {
   padding: 0;
 }
 
+button:not(:disabled),
+a[href],
+select:not(:disabled),
+input[type="range"]:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+button:disabled,
+select:disabled,
+input[type="range"]:disabled {
+  cursor: not-allowed;
+}
+
 /* Scrollbar customization */
 ::-webkit-scrollbar {
   width: 8px;

@@ -38,7 +38,7 @@ import {
 import { auth, loginWithGoogle, logout } from "../firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { puzzlesData } from "../puzzlesData";
-import { ExplanationItem, ChatThread } from "../types";
+import { ExplanationItem } from "../types";
 import ExplainDialog from "../components/ExplainDialog";
 import CompanionChat from "../components/CompanionChat";
 import HistoryPanel from "../components/HistoryPanel";
@@ -1923,9 +1923,6 @@ def find_kth_largest(nums, k):
                   setSelectedText(item.selectedText);
                   setIsExplainOpen(true);
                 }}
-                onOpenChat={(thread) => {
-                  setIsFloatingChatOpen(true);
-                }}
               />
             </motion.div>
           )}
@@ -1985,7 +1982,7 @@ def find_kth_largest(nums, k):
             setIsProgressOpen(!isProgressOpen);
             setIsFloatingChatOpen(false);
           }}
-          className="fixed bottom-6 z-[9999] bg-[var(--accent)] hover:brightness-110 hover:scale-110 active:scale-95 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center cursor-pointer transition-all border border-white/10 right-6 lg:right-[calc(300px+1.5rem)]"
+          className="fixed bottom-6 left-6 z-[900] bg-[var(--accent)] hover:brightness-110 hover:scale-110 active:scale-95 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center cursor-pointer transition-all border border-white/10"
           title="מעקב התקדמות אישי"
         >
           <Trophy size={22} className={isProgressOpen ? "rotate-12 transition-all duration-200" : "transition-all duration-200"} />
@@ -1997,7 +1994,7 @@ def find_kth_largest(nums, k):
             setIsFloatingChatOpen(!isFloatingChatOpen);
             setIsProgressOpen(false);
           }}
-          className="fixed bottom-6 left-6 z-[9999] bg-[var(--accent)] hover:scale-110 active:scale-95 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center cursor-pointer transition-all border border-white/10"
+          className="fixed bottom-6 z-[900] bg-[var(--accent)] hover:scale-110 active:scale-95 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center cursor-pointer transition-all border border-white/10 right-6 lg:right-[calc(300px+1.5rem)]"
           title="עוזר למידה AI אישי"
         >
           <MessageSquare size={24} className={isFloatingChatOpen ? "rotate-90 transition-all duration-200 text-white" : "transition-all duration-200 text-white"} />
@@ -2011,13 +2008,12 @@ def find_kth_largest(nums, k):
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 30, scale: 0.9 }}
               transition={{ duration: 0.2 }}
-              className="fixed bottom-24 left-6 z-[9999] w-[600px] max-w-[calc(100vw-32px)] h-[520px] max-h-[calc(100vh-120px)] rounded-2xl shadow-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden flex flex-col"
+              className="fixed bottom-24 z-[900] w-[600px] max-w-[calc(100vw-32px)] h-[520px] max-h-[calc(100vh-120px)] rounded-2xl shadow-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden flex flex-col right-6 lg:right-[calc(300px+1.5rem)]"
             >
               <CompanionChat 
                 user={user} 
                 onClose={() => setIsFloatingChatOpen(false)} 
                 highThinking={highThinking}
-                setHighThinking={setHighThinking}
               />
             </motion.div>
           )}
@@ -2031,7 +2027,7 @@ def find_kth_largest(nums, k):
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 30, scale: 0.9 }}
               transition={{ duration: 0.2 }}
-              className="fixed bottom-24 z-[9999] w-[500px] max-w-[calc(100vw-32px)] rounded-2xl shadow-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden flex flex-col p-6 text-right right-6 lg:right-[calc(300px+1.5rem)]"
+              className="fixed bottom-24 left-6 z-[900] w-[500px] max-w-[calc(100vw-32px)] rounded-2xl shadow-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden flex flex-col p-6 text-right"
             >
               <div className="flex items-center justify-between border-b border-[var(--border)] pb-3 mb-4">
                 <div className="flex items-center gap-2 text-amber-500 font-bold">

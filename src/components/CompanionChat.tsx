@@ -1,56 +1,40 @@
 import React, { useState, useEffect, useRef } from "react";
 import { ChatMessage, ChatThread } from "../types";
 import { User } from "firebase/auth";
-import { collection, addDoc, getDocs, query, where, orderBy, updateDoc, doc, Timestamp, deleteDoc } from "firebase/firestore";
+import { collection, addDoc, updateDoc, doc, Timestamp } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
 import ReactMarkdown from "react-markdown";
+import {
+  NEW_CHAT_TITLE,
+  createChatTitleFromMessage,
+  createFreshChatThread,
+} from "../lib/chat-thread";
 import { 
   Send, 
   Bot, 
   User as UserIcon, 
-  Trash2, 
   Loader2, 
   Plus, 
-  HelpCircle, 
-  BrainCircuit, 
   MessageSquare,
-  Sparkles,
   X
 } from "lucide-react";
 
 interface CompanionChatProps {
   user: User | null;
-  onSelectThread?: (thread: ChatThread) => void;
   onClose?: () => void;
   highThinking?: boolean;
-  setHighThinking?: (val: boolean) => void;
 }
 
-export default function CompanionChat({ user, onClose, highThinking: propHighThinking, setHighThinking: propSetHighThinking }: CompanionChatProps) {
-  const [threads, setThreads] = useState<ChatThread[]>([]);
+export default function CompanionChat({ user, onClose, highThinking = false }: CompanionChatProps) {
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [localHighThinking, setLocalHighThinking] = useState(false);
-
-  const isHighThinking = propHighThinking !== undefined ? propHighThinking : localHighThinking;
-  const toggleHighThinking = () => {
-    if (propSetHighThinking) {
-      propSetHighThinking(!isHighThinking);
-    } else {
-      setLocalHighThinking(!isHighThinking);
-    }
-  };
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
-  // Load threads from Firestore or use standard LocalStorage if guest
+  // Start each chat surface with one active conversation only.
   useEffect(() => {
-    if (user) {
-      loadFirestoreThreads();
-    } else {
-      loadGuestThreads();
-    }
+    createNewThread();
   }, [user]);
 
   // Scroll to bottom when messages update
@@ -58,91 +42,23 @@ export default function CompanionChat({ user, onClose, highThinking: propHighThi
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activeThread?.messages, loading]);
 
-  const loadFirestoreThreads = async () => {
-    if (!user) return;
-    try {
-      const q = query(
-        collection(db, "chats"),
-        where("userId", "==", user.uid),
-        orderBy("createdAt", "desc")
-      );
-      const snap = await getDocs(q);
-      const loaded: ChatThread[] = [];
-      snap.forEach((docSnap) => {
-        const d = docSnap.data();
-        loaded.push({
-          id: docSnap.id,
-          userId: d.userId,
-          title: d.title,
-          messages: d.messages,
-          createdAt: d.createdAt,
-        });
-      });
-
-      setThreads(loaded);
-      if (loaded.length > 0) {
-        setActiveThread(loaded[0]);
-      } else {
-        createNewThread(loaded);
-      }
-    } catch (err) {
-      console.error("Error loading chat threads:", err);
-      handleFirestoreError(err, OperationType.GET, "chats");
-    }
-  };
-
-  const loadGuestThreads = () => {
-    const saved = localStorage.getItem("guest_chats");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setThreads(parsed);
-        if (parsed.length > 0) {
-          setActiveThread(parsed[0]);
-          return;
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    createNewThread([]);
-  };
-
-  const createNewThread = async (currentThreads = threads) => {
-    const newThread: ChatThread = {
+  const createNewThread = () => {
+    const newThread = createFreshChatThread({
       id: "temp_" + Date.now(),
       userId: user?.uid || "guest",
-      title: "שיחה חדשה לגבי אלגוריתמים",
-      messages: [
-        {
-          sender: "ai",
-          text: "שלום! אני אלגו-באדי (AlgoBuddy), המנטור האישי שלך לראיונות אלגוריתמים והכנה להייטק. שאל אותי שאלות לגבי תבניות הקוד, בקש סימולציית ראיון בזמן אמת, או התייעץ איתי על בעיות קשות!",
-          createdAt: Date.now(),
-        },
-      ],
       createdAt: new Date().toISOString(),
-    };
+    });
 
-    if (user) {
-      try {
-        const docRef = await addDoc(collection(db, "chats"), {
-          userId: user.uid,
-          title: newThread.title,
-          messages: newThread.messages,
-          createdAt: Timestamp.now().toDate().toISOString(),
-        });
-        const savedThread = { ...newThread, id: docRef.id };
-        setThreads([savedThread, ...currentThreads]);
-        setActiveThread(savedThread);
-      } catch (err) {
-        console.error("Failed to create thread in Firestore:", err);
-        handleFirestoreError(err, OperationType.CREATE, "chats");
-      }
-    } else {
-      const updated = [newThread, ...currentThreads];
-      setThreads(updated);
-      setActiveThread(newThread);
-      localStorage.setItem("guest_chats", JSON.stringify(updated));
+    setInput("");
+    setActiveThread(newThread);
+  };
+
+  const getGuestThreads = (): ChatThread[] => {
+    try {
+      return JSON.parse(localStorage.getItem("guest_chats") || "[]");
+    } catch (e) {
+      console.error(e);
+      return [];
     }
   };
 
@@ -162,8 +78,8 @@ export default function CompanionChat({ user, onClose, highThinking: propHighThi
     const updatedThread = { ...activeThread, messages: updatedMessages };
 
     // Set first messages title based on prompt
-    if (activeThread.messages.length === 1 && activeThread.title.startsWith("שיחה חדשה")) {
-      updatedThread.title = messageText.substring(0, 30) + "...";
+    if (activeThread.messages.length === 1 && activeThread.title.startsWith(NEW_CHAT_TITLE)) {
+      updatedThread.title = createChatTitleFromMessage(messageText);
     }
 
     setActiveThread(updatedThread);
@@ -179,7 +95,7 @@ export default function CompanionChat({ user, onClose, highThinking: propHighThi
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: apiMessages, highThinking: isHighThinking }),
+        body: JSON.stringify({ messages: apiMessages, highThinking }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -193,13 +109,22 @@ export default function CompanionChat({ user, onClose, highThinking: propHighThi
       const finalMessages = [...updatedMessages, aiMsg];
       const finalThread = { ...updatedThread, messages: finalMessages };
 
-      // Update thread states
       setActiveThread(finalThread);
-      const updatedThreadsList = threads.map((t) => (t.id === activeThread.id ? finalThread : t));
-      setThreads(updatedThreadsList);
 
       // Save database sync
-      if (user && !activeThread.id.startsWith("temp_")) {
+      if (user && activeThread.id.startsWith("temp_")) {
+        try {
+          const docRef = await addDoc(collection(db, "chats"), {
+            userId: user.uid,
+            title: finalThread.title,
+            messages: finalMessages,
+            createdAt: Timestamp.now().toDate().toISOString(),
+          });
+          setActiveThread({ ...finalThread, id: docRef.id });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.CREATE, "chats");
+        }
+      } else if (user) {
         try {
           await updateDoc(doc(db, "chats", activeThread.id), {
             messages: finalMessages,
@@ -209,6 +134,12 @@ export default function CompanionChat({ user, onClose, highThinking: propHighThi
           handleFirestoreError(err, OperationType.UPDATE, `chats/${activeThread.id}`);
         }
       } else if (!user) {
+        const guestThreads = getGuestThreads();
+        const existingThreadIndex = guestThreads.findIndex((t) => t.id === activeThread.id);
+        const updatedThreadsList =
+          existingThreadIndex >= 0
+            ? guestThreads.map((t) => (t.id === activeThread.id ? finalThread : t))
+            : [finalThread, ...guestThreads];
         localStorage.setItem("guest_chats", JSON.stringify(updatedThreadsList));
       }
     } catch (error: any) {
@@ -222,28 +153,6 @@ export default function CompanionChat({ user, onClose, highThinking: propHighThi
       setActiveThread(finalThread);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const deleteThread = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    
-    const filtered = threads.filter((t) => t.id !== id);
-    setThreads(filtered);
-
-    if (activeThread?.id === id) {
-      setActiveThread(filtered.length > 0 ? filtered[0] : null);
-    }
-
-    if (user && !id.startsWith("temp_")) {
-      try {
-        await deleteDoc(doc(db, "chats", id));
-      } catch (err) {
-        console.error("Failed to delete thread from firestore:", err);
-        handleFirestoreError(err, OperationType.DELETE, `chats/${id}`);
-      }
-    } else if (!user) {
-      localStorage.setItem("guest_chats", JSON.stringify(filtered));
     }
   };
 
@@ -264,6 +173,15 @@ export default function CompanionChat({ user, onClose, highThinking: propHighThi
         </div>
         
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => createNewThread()}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-tint)] text-[var(--accent)] hover:brightness-95 rounded-lg transition text-xs font-extrabold disabled:opacity-50"
+            title="שיחה חדשה"
+          >
+            <Plus size={14} />
+            שיחה חדשה
+          </button>
           {onClose && (
             <button
               onClick={onClose}
@@ -277,41 +195,6 @@ export default function CompanionChat({ user, onClose, highThinking: propHighThi
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        
-        {/* SIDEBAR THREADS LIST */}
-        <div className="w-[150px] shrink-0 border-l border-[var(--border)] bg-[var(--accent-tint)]/15 overflow-y-auto hidden sm:block">
-          <div className="p-3 space-y-1">
-            <div className="flex items-center justify-between px-2 mb-2">
-              <h4 className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider">שיחות קודמות</h4>
-              <button
-                onClick={() => createNewThread()}
-                className="p-1 hover:bg-[var(--accent-tint)] text-[var(--accent)] rounded transition cursor-pointer flex items-center justify-center"
-                title="שיחה חדשה"
-              >
-                <Plus size={12} />
-              </button>
-            </div>
-            {threads.map((t) => (
-              <div
-                key={t.id}
-                onClick={() => setActiveThread(t)}
-                className={`group p-2 rounded-lg cursor-pointer text-xs font-medium flex items-center justify-between transition ${
-                  activeThread?.id === t.id
-                    ? "bg-[var(--accent-tint)] text-[var(--accent)] border-r-3 border-[var(--accent)] font-bold"
-                    : "text-[var(--text)] hover:bg-[var(--accent-tint)]/50"
-                }`}
-              >
-                <span className="truncate max-w-[100px]">{t.title}</span>
-                <button
-                  onClick={(e) => deleteThread(t.id, e)}
-                  className="p-1 text-[var(--muted)] hover:text-red-500 rounded transition opacity-0 group-hover:opacity-100 cursor-pointer z-10"
-                >
-                  <Trash2 size={12} className="cursor-pointer" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
 
         {/* MESSAGES CONVERSATION WINDOW */}
         <div className="flex-1 flex flex-col bg-[var(--bg)] overflow-hidden">

@@ -4,8 +4,18 @@ import { User } from "firebase/auth";
 import { collection, addDoc, doc, updateDoc, Timestamp } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
 import ReactMarkdown from "react-markdown";
+import { buildTtsChunks, TtsProvider } from "../lib/tts";
+import {
+  TTS_PLAYBACK_RATE_MAX,
+  TTS_PLAYBACK_RATE_MIN,
+  TTS_PLAYBACK_RATE_STEP,
+  TtsPlaybackRate,
+  getPlaybackStartIndex,
+  normalizePlaybackRate,
+} from "../lib/tts-player";
 import { 
   Play, 
+  Pause,
   Square, 
   Loader2, 
   Sparkles, 
@@ -13,6 +23,7 @@ import {
   Video as VideoIcon, 
   X, 
   Volume2, 
+  RotateCcw,
   Download, 
   CheckCircle,
   AlertCircle
@@ -43,17 +54,23 @@ export default function ExplainDialog({
   // Audio state
   const [ttsLoading, setTtsLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [ttsProvider, setTtsProvider] = useState<"gemini" | "edge">("edge");
+  const [isPaused, setIsPaused] = useState(false);
+  const [ttsProvider, setTtsProvider] = useState<TtsProvider>("edge");
+  const [ttsPlaybackRate, setTtsPlaybackRate] = useState<TtsPlaybackRate>(1);
+  const [hasCompleteTtsCache, setHasCompleteTtsCache] = useState(false);
 
   const chunksRef = useRef<string[]>([]);
   const currentChunkIndexRef = useRef<number>(0);
   const audioQueueRef = useRef<(string | null)[]>([]);
+  const audioFetchPromisesRef = useRef<(Promise<string> | null)[]>([]);
   const isPlayingRef = useRef<boolean>(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const geminiWarmupAbortControllerRef = useRef<AbortController | null>(null);
+  const activeTtsCacheKeyRef = useRef("");
 
   // Keep track of provider and explanation for the cached audio
-  const [cachedProvider, setCachedProvider] = useState<"gemini" | "edge">("gemini");
+  const [cachedProvider, setCachedProvider] = useState<TtsProvider>("gemini");
   const [cachedExplanation, setCachedExplanation] = useState<string>("");
 
   // YouTube state
@@ -64,6 +81,8 @@ export default function ExplainDialog({
   const [firestoreId, setFirestoreId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ttsWarning, setTtsWarning] = useState<string | null>(null);
+  const isCurrentTtsCacheComplete =
+    hasCompleteTtsCache && cachedProvider === ttsProvider && cachedExplanation === explanation;
 
   // Re-run explain generation or load existing item
   useEffect(() => {
@@ -95,6 +114,36 @@ export default function ExplainDialog({
       stopTTS();
     };
   }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = ttsPlaybackRate;
+    }
+  }, [ttsPlaybackRate]);
+
+  useEffect(() => {
+    if (!isOpen || !explanation) return;
+
+    warmGeminiTTSCache(explanation);
+
+    return () => {
+      if (geminiWarmupAbortControllerRef.current) {
+        geminiWarmupAbortControllerRef.current.abort();
+        geminiWarmupAbortControllerRef.current = null;
+      }
+    };
+  }, [isOpen, explanation]);
 
   const generateExplanation = async () => {
     setLoading(true);
@@ -141,57 +190,87 @@ export default function ExplainDialog({
     }
   };
 
-  // Helper to split text into readable chunks for TTS (only used for Edge)
-  const splitTextIntoChunks = (text: string): string[] => {
-    const paragraphs = text.split(/\n+/);
-    const chunks: string[] = [];
-    
-    for (const para of paragraphs) {
-      const cleanPara = para.trim().replace(/[*_#`~[\]()]/g, "").replace(/<[^>]*>/g, "");
-      if (!cleanPara) continue;
-      
-      if (cleanPara.length > 350) {
-        const sentences = cleanPara.split(/(?<=[.!?])\s+/);
-        let currentChunk = "";
-        for (const sentence of sentences) {
-          if ((currentChunk + sentence).length > 350) {
-            if (currentChunk) chunks.push(currentChunk.trim());
-            currentChunk = sentence;
-          } else {
-            currentChunk += " " + sentence;
-          }
-        }
-        if (currentChunk) chunks.push(currentChunk.trim());
-      } else {
-        chunks.push(cleanPara);
-      }
-    }
-    return chunks;
+  const getTtsCacheKey = (provider: TtsProvider, text: string) => `${provider}:${text}`;
+
+  const isAudioCacheComplete = () =>
+    chunksRef.current.length > 0 &&
+    audioQueueRef.current.length === chunksRef.current.length &&
+    audioQueueRef.current.every(Boolean);
+
+  const activateTtsCache = (provider: TtsProvider, text: string, chunks: string[]) => {
+    activeTtsCacheKeyRef.current = getTtsCacheKey(provider, text);
+    chunksRef.current = chunks;
+    audioQueueRef.current = new Array(chunks.length).fill(null);
+    audioFetchPromisesRef.current = new Array(chunks.length).fill(null);
+    currentChunkIndexRef.current = 0;
+    setCachedProvider(provider);
+    setCachedExplanation(text);
+    setHasCompleteTtsCache(false);
   };
 
-  const stopTTS = () => {
+  const finishTTS = () => {
     isPlayingRef.current = false;
     setIsPlaying(false);
+    setIsPaused(false);
     setTtsLoading(false);
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
     }
+    currentChunkIndexRef.current = 0;
+    setHasCompleteTtsCache(isAudioCacheComplete());
+  };
+
+  const stopTTS = () => {
+    finishTTS();
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    if (geminiWarmupAbortControllerRef.current) {
+      geminiWarmupAbortControllerRef.current.abort();
+      geminiWarmupAbortControllerRef.current = null;
     }
   };
 
-  const fetchChunkTTS = async (text: string, index: number): Promise<string> => {
-    if (audioQueueRef.current[index]) {
-      return audioQueueRef.current[index]!;
+  const pauseTTS = () => {
+    if (!audioRef.current || !isPlayingRef.current) return;
+
+    audioRef.current.pause();
+    isPlayingRef.current = false;
+    setIsPlaying(false);
+    setIsPaused(true);
+  };
+
+  const resumeTTS = () => {
+    if (!isPaused) return;
+
+    isPlayingRef.current = true;
+    setIsPlaying(true);
+    setIsPaused(false);
+
+    if (audioRef.current) {
+      audioRef.current.playbackRate = ttsPlaybackRate;
+      audioRef.current.play().catch((err) => {
+        setError(err.message || "Failed to resume TTS");
+        stopTTS();
+      });
+      return;
     }
 
+    playNextChunk();
+  };
+
+  const fetchTtsAudioUrl = async (
+    text: string,
+    provider: TtsProvider,
+    signal?: AbortSignal,
+  ): Promise<string> => {
     const res = await fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, provider: ttsProvider }),
-      signal: abortControllerRef.current?.signal,
+      body: JSON.stringify({ text, provider }),
+      signal,
     });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
@@ -200,17 +279,81 @@ export default function ExplainDialog({
       setTtsWarning("קריין Gemini אינו נתמך כעת בחשבון הגוגל שלך (הגבלת מודל/מכסה). המערכת העבירה אותך לקריין Edge.");
     }
 
-    const url = `data:${data.mimeType || "audio/wav"};base64,${data.audio}`;
-    audioQueueRef.current[index] = url;
-    return url;
+    return `data:${data.mimeType || "audio/wav"};base64,${data.audio}`;
+  };
+
+  const fetchChunkTTS = async (
+    text: string,
+    index: number,
+    provider: TtsProvider = ttsProvider,
+    signal: AbortSignal | undefined = abortControllerRef.current?.signal,
+  ): Promise<string> => {
+    if (audioQueueRef.current[index]) {
+      return audioQueueRef.current[index]!;
+    }
+
+    if (audioFetchPromisesRef.current[index]) {
+      return audioFetchPromisesRef.current[index]!;
+    }
+
+    const cacheKey = activeTtsCacheKeyRef.current;
+    const fetchPromise = fetchTtsAudioUrl(text, provider, signal)
+      .then((url) => {
+        if (activeTtsCacheKeyRef.current === cacheKey) {
+          audioQueueRef.current[index] = url;
+          setHasCompleteTtsCache(isAudioCacheComplete());
+        }
+        return url;
+      })
+      .finally(() => {
+        if (activeTtsCacheKeyRef.current === cacheKey) {
+          audioFetchPromisesRef.current[index] = null;
+        }
+      });
+
+    audioFetchPromisesRef.current[index] = fetchPromise;
+    return fetchPromise;
+  };
+
+  const warmGeminiTTSCache = (text: string) => {
+    const provider: TtsProvider = "gemini";
+    const cacheKey = getTtsCacheKey(provider, text);
+    if (activeTtsCacheKeyRef.current === cacheKey && isAudioCacheComplete()) return;
+
+    if (geminiWarmupAbortControllerRef.current) {
+      geminiWarmupAbortControllerRef.current.abort();
+    }
+
+    if (activeTtsCacheKeyRef.current !== cacheKey) {
+      activateTtsCache(provider, text, buildTtsChunks(text, provider));
+    }
+
+    if (chunksRef.current.length === 0) return;
+
+    const warmupController = new AbortController();
+    geminiWarmupAbortControllerRef.current = warmupController;
+
+    Promise.all(
+      chunksRef.current.map((chunk, index) =>
+        fetchChunkTTS(chunk, index, provider, warmupController.signal),
+      ),
+    )
+      .catch((err: any) => {
+        if (err.name !== "AbortError") {
+          console.error("[TTS Warmup] Gemini prefetch failed:", err);
+        }
+      })
+      .finally(() => {
+        if (geminiWarmupAbortControllerRef.current === warmupController) {
+          geminiWarmupAbortControllerRef.current = null;
+        }
+      });
   };
 
   const prefetchNextChunks = () => {
-    if (ttsProvider !== "edge") return;
-    
     const nextIndex = currentChunkIndexRef.current + 1;
     if (nextIndex < chunksRef.current.length && !audioQueueRef.current[nextIndex]) {
-      fetchChunkTTS(chunksRef.current[nextIndex], nextIndex).catch((err) => {
+      fetchChunkTTS(chunksRef.current[nextIndex], nextIndex, ttsProvider).catch((err) => {
         console.error(`Failed to prefetch chunk ${nextIndex}:`, err);
       });
     }
@@ -221,7 +364,7 @@ export default function ExplainDialog({
 
     const index = currentChunkIndexRef.current;
     if (index >= chunksRef.current.length) {
-      stopTTS();
+      finishTTS();
       return;
     }
 
@@ -257,7 +400,11 @@ export default function ExplainDialog({
     }
     
     audioRef.current = new Audio(url);
-    audioRef.current.play();
+    audioRef.current.playbackRate = ttsPlaybackRate;
+    audioRef.current.play().catch((err) => {
+      setError(err.message || "Audio playback failed");
+      stopTTS();
+    });
     
     audioRef.current.onended = () => {
       currentChunkIndexRef.current++;
@@ -273,34 +420,75 @@ export default function ExplainDialog({
     prefetchNextChunks();
   };
 
-  const playTTS = async () => {
-    if (isPlaying) {
-      stopTTS();
+  const startTTS = async (replayRequested = false) => {
+    if (isPlaying && !replayRequested) {
+      pauseTTS();
+      return;
+    }
+
+    if (replayRequested) {
+      isPlayingRef.current = false;
+      setIsPlaying(false);
+      setIsPaused(false);
+    }
+
+    if (isPaused && !replayRequested) {
+      resumeTTS();
       return;
     }
 
     if (!explanation) return;
 
-    abortControllerRef.current = new AbortController();
-    
-    const isCacheValid = cachedProvider === ttsProvider && cachedExplanation === explanation;
+    const isCacheValid = activeTtsCacheKeyRef.current === getTtsCacheKey(ttsProvider, explanation);
     
     if (!isCacheValid) {
-      chunksRef.current = ttsProvider === "gemini" 
-        ? [explanation] 
-        : splitTextIntoChunks(explanation);
-        
-      console.log("[TTS Player] Built chunks:", chunksRef.current);
-      currentChunkIndexRef.current = 0;
-      audioQueueRef.current = new Array(chunksRef.current.length).fill(null);
-      setCachedProvider(ttsProvider);
-      setCachedExplanation(explanation);
+      const chunks = buildTtsChunks(explanation, ttsProvider);
+      console.log("[TTS Player] Built chunks:", chunks);
+      activateTtsCache(ttsProvider, explanation, chunks);
     }
 
+    currentChunkIndexRef.current = getPlaybackStartIndex({
+      chunkCount: chunksRef.current.length,
+      currentIndex: currentChunkIndexRef.current,
+      isPaused,
+      replayRequested,
+    });
+    abortControllerRef.current = new AbortController();
     isPlayingRef.current = true;
     setIsPlaying(true);
+    setIsPaused(false);
 
     playNextChunk();
+  };
+
+  const playTTS = () => {
+    startTTS(false);
+  };
+
+  const replayTTS = () => {
+    if (!isCurrentTtsCacheComplete || ttsLoading) return;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    startTTS(true);
+  };
+
+  const handleTtsProviderChange = (value: TtsProvider) => {
+    setTtsProvider(value);
+    if (value === "gemini" && explanation) {
+      warmGeminiTTSCache(explanation);
+      return;
+    }
+
+    if (geminiWarmupAbortControllerRef.current) {
+      geminiWarmupAbortControllerRef.current.abort();
+      geminiWarmupAbortControllerRef.current = null;
+    }
+  };
+
+  const handlePlaybackRateChange = (value: string) => {
+    setTtsPlaybackRate(normalizePlaybackRate(value));
   };
 
   // YouTube video search
@@ -374,20 +562,39 @@ export default function ExplainDialog({
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
               <h4 className="font-bold text-base flex items-center gap-2">
                 <Sparkles size={18} className="text-[var(--accent)]" />
-                הסבר ידידותי ומפורט:
+                הסבר ידידותי וממוקד:
               </h4>
 
               {/* TTS Action */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap justify-end">
                 <select
                   value={ttsProvider}
-                  onChange={(e) => setTtsProvider(e.target.value as "gemini" | "edge")}
-                  disabled={isPlaying || ttsLoading}
+                  onChange={(e) => handleTtsProviderChange(e.target.value as TtsProvider)}
+                  disabled={isPlaying || isPaused || ttsLoading}
                   className="bg-black/5 dark:bg-white/5 border border-[var(--border)] text-xs rounded-lg px-2 py-1.5 outline-none text-[var(--text)] font-semibold transition hover:border-[var(--accent)] focus:border-[var(--accent)] disabled:opacity-50 cursor-pointer"
                 >
                   <option value="gemini">קריין Gemini (איכותי)</option>
                   <option value="edge">קריין Edge (חופשי ומהיר)</option>
                 </select>
+
+                <div
+                  className="flex items-center gap-2 min-w-[150px] bg-black/5 dark:bg-white/5 border border-[var(--border)] rounded-lg px-2 py-1.5 transition hover:border-[var(--accent)]"
+                  title="מהירות הקריאה"
+                >
+                  <input
+                    type="range"
+                    min={TTS_PLAYBACK_RATE_MIN}
+                    max={TTS_PLAYBACK_RATE_MAX}
+                    step={TTS_PLAYBACK_RATE_STEP}
+                    value={ttsPlaybackRate}
+                    onChange={(e) => handlePlaybackRateChange(e.target.value)}
+                    aria-label="מהירות הקריאה"
+                    className="w-24 accent-[var(--accent)]"
+                  />
+                  <span className="text-xs font-black tabular-nums text-[var(--text)] min-w-10 text-center">
+                    {ttsPlaybackRate.toFixed(2)}x
+                  </span>
+                </div>
 
                 <button
                   onClick={playTTS}
@@ -395,18 +602,41 @@ export default function ExplainDialog({
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition ${
                     isPlaying 
                       ? "bg-red-500 text-white" 
+                      : isPaused
+                        ? "bg-emerald-600 hover:bg-emerald-700 text-white"
                       : "bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white"
                   } disabled:opacity-50`}
                 >
                   {ttsLoading ? (
                     <Loader2 size={14} className="animate-spin" />
                   ) : isPlaying ? (
-                    <Square size={14} />
+                    <Pause size={14} />
+                  ) : isPaused ? (
+                    <Play size={14} />
                   ) : (
                     <Volume2 size={14} />
                   )}
-                  {isPlaying ? "עצור הקראה" : "הקרא הסבר בקול"}
+                  {isPlaying ? "השהה" : isPaused ? "המשך" : "הקרא הסבר בקול"}
                 </button>
+
+                <button
+                  onClick={replayTTS}
+                  disabled={loading || ttsLoading || !isCurrentTtsCacheComplete}
+                  className="p-2 rounded-lg bg-black/5 dark:bg-white/5 border border-[var(--border)] text-[var(--text)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="השמע שוב ללא יצירת קריין מחדש"
+                >
+                  <RotateCcw size={15} />
+                </button>
+
+                {(isPlaying || isPaused) && (
+                  <button
+                    onClick={stopTTS}
+                    className="p-2 rounded-lg bg-black/5 dark:bg-white/5 border border-[var(--border)] text-red-500 hover:border-red-500 transition"
+                    title="עצור"
+                  >
+                    <Square size={15} />
+                  </button>
+                )}
               </div>
               {ttsWarning && (
                 <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-1">
@@ -418,7 +648,7 @@ export default function ExplainDialog({
             {loading ? (
               <div className="py-12 flex flex-col items-center justify-center gap-3 text-[var(--muted)]">
                 <Loader2 className="animate-spin text-[var(--accent)]" size={32} />
-                <p className="text-sm font-medium">בונה הסבר מפורט ומעודד... אנא המתן</p>
+                <p className="text-sm font-medium">בונה הסבר ממוקד ומעודד... אנא המתן</p>
               </div>
             ) : (
               <div className="prose prose-sm max-w-none text-[var(--text)] dark:prose-invert leading-relaxed">

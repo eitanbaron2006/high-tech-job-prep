@@ -20,10 +20,9 @@ import {
 interface HistoryPanelProps {
   user: User | null;
   onOpenExplanation: (item: ExplanationItem) => void;
-  onOpenChat: (thread: ChatThread) => void;
 }
 
-export default function HistoryPanel({ user, onOpenExplanation, onOpenChat }: HistoryPanelProps) {
+export default function HistoryPanel({ user, onOpenExplanation }: HistoryPanelProps) {
   const [explanations, setExplanations] = useState<ExplanationItem[]>([]);
   const [chats, setChats] = useState<ChatThread[]>([]);
   const [loading, setLoading] = useState(false);
@@ -281,8 +280,7 @@ export default function HistoryPanel({ user, onOpenExplanation, onOpenChat }: Hi
             {chats.map((chat) => (
               <div
                 key={chat.id}
-                onClick={() => onOpenChat(chat)}
-                className="bg-[var(--bg)] border border-[var(--border)] hover:border-[var(--accent)] p-4 rounded-xl flex items-center justify-between cursor-pointer transition shadow-xs"
+                className="bg-[var(--bg)] border border-[var(--border)] p-4 rounded-xl flex items-center justify-between transition shadow-xs"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 bg-[var(--accent-tint)] text-[var(--accent)] rounded-lg flex items-center justify-center shrink-0">
@@ -291,14 +289,13 @@ export default function HistoryPanel({ user, onOpenExplanation, onOpenChat }: Hi
                   <div>
                     <h4 className="font-extrabold text-sm text-[var(--text)]">{chat.title}</h4>
                     <p className="text-xs text-[var(--muted)] mt-0.5">
-                      {chat.messages.length} הודעות בשיחה · עודכן לאחרונה ב-{formatDate(chat.createdAt)}
+                      {chat.messages.length} הודעות בשיחה · נוצר ב-{formatDate(chat.createdAt)}
                     </p>
                   </div>
                 </div>
 
-                <span className="text-xs font-bold text-[var(--accent)] flex items-center gap-1">
-                  המשך שיחה
-                  <ExternalLink size={12} />
+                <span className="text-xs font-bold text-[var(--muted)]">
+                  נשמר בהיסטוריה
                 </span>
               </div>
             ))}
