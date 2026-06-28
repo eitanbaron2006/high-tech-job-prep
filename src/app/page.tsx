@@ -33,7 +33,8 @@ import {
   CheckSquare,
   FileText,
   Video,
-  Home
+  Home,
+  Compass
 } from "lucide-react";
 import { auth, loginWithGoogle, logout } from "../firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
@@ -1753,23 +1754,18 @@ def find_kth_largest(nums, k):
                 <div className="box signal mt-4 font-medium">
                   <b>הקשר ישראלי:</b> בחברות הטק הגדולות בישראל (גוגל, מטא, אמזון ת"א, מיקרוסופט) LeetCode הוא הסטנדרט המנצח. בסטארטאפים תמצא לעיתים שילוב מעשי של System Design בסיסי או פתרון בעיה קרובה למוצר.
                 </div>
-
-                <p className="text-center font-extrabold text-sm text-[var(--muted)] mt-12">
-                  בהצלחה בראיון 💪 · זכור: זיהוי התבנית מנצח שינון פתרונות!
-                </p>
               </div>
 
               {/* FAQ SECTION */}
-              <div id="faq-section" className="scroll-mt-20 bg-[var(--panel)] border border-[var(--border)] p-6 rounded-xl shadow-sm space-y-4 text-right mt-16">
-                <div>
-                  <h2 className="text-lg font-extrabold text-[var(--text)] flex items-center gap-2">
-                    <span>❓</span>
-                    <span>שאלות נפוצות</span>
-                  </h2>
-                  <p className="text-xs text-[var(--muted)]">כל מה שרצית לדעת על שיטת 8 התבניות ותהליך ההכנה</p>
-                </div>
+              <div id="faq-section" className="scroll-mt-20 text-right mt-16">
+                <h2 className="section-title">
+                  <HelpCircle size={24} className="text-[var(--accent)] shrink-0" />
+                  שאלות נפוצות
+                  <span className="en">FAQ</span>
+                </h2>
+                <p className="section-intro">כל מה שרצית לדעת על שיטת 8 התבניות ותהליך ההכנה.</p>
 
-                <div className="space-y-3 pt-2">
+                <div className="space-y-3">
                   {[
                     {
                       q: "למה להתמקד ב-8 תבניות במקום לפתור מאות שאלות ב-LeetCode?",
@@ -1803,9 +1799,10 @@ def find_kth_largest(nums, k):
                           className="w-full text-right p-4 flex items-center justify-between gap-4 font-bold text-sm text-[var(--text)] hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
                         >
                           <span>{faq.q}</span>
-                          <span className={`text-xs transition-transform duration-200 shrink-0 ${isOpen ? "rotate-180" : ""}`}>
-                            ▼
-                          </span>
+                          <ChevronDown
+                            size={16}
+                            className={`shrink-0 text-[var(--accent)] transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+                          />
                         </button>
                         <AnimatePresence initial={false}>
                           {isOpen && (
@@ -1830,14 +1827,18 @@ def find_kth_largest(nums, k):
 
               {/* QUICK LINKS SECTION */}
               <div id="links-section" className="scroll-mt-20 space-y-4 mt-16">
-                <h2 className="text-base font-extrabold text-[var(--text)] border-b border-[var(--border)] pb-2 text-right">
-                  🧭 לאן תרצה להמשיך עכשיו?
+                <h2 className="section-title">
+                  <Compass size={24} className="text-[var(--accent)] shrink-0" />
+                  לאן תרצה להמשיך עכשיו?
+                  <span className="en">Next Steps</span>
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Card 1 */}
                   <div className="bg-[var(--panel)] border border-[var(--border)] p-5 rounded-xl flex flex-col justify-between transition-all hover:shadow-md hover:border-[var(--accent)] text-right group">
                     <div className="space-y-2">
-                      <div className="text-xl">📚</div>
+                      <div className="w-10 h-10 rounded-lg bg-[var(--accent-tint)] flex items-center justify-center mb-1">
+                        <BookOpen size={20} className="text-[var(--accent)]" />
+                      </div>
                       <h3 className="font-extrabold text-sm text-[var(--text)] m-0">המדריך המלא ותבניות קוד</h3>
                       <p className="text-xs text-[var(--muted)] leading-relaxed m-0">
                         קרא את החומר העיוני, הסברים מפורטים, ניתוחי סיבוכיות Big-O ואת כל 24 השאלות הפתורות במלואן עם קוד תקין מוכן להרצה.
@@ -1854,7 +1855,9 @@ def find_kth_largest(nums, k):
                   {/* Card 2 */}
                   <div className="bg-[var(--panel)] border border-[var(--border)] p-5 rounded-xl flex flex-col justify-between transition-all hover:shadow-md hover:border-[var(--accent)] text-right group">
                     <div className="space-y-2">
-                      <div className="text-xl">🧩</div>
+                      <div className="w-10 h-10 rounded-lg bg-[var(--accent-tint)] flex items-center justify-center mb-1">
+                        <Puzzle size={20} className="text-[var(--accent)]" />
+                      </div>
                       <h3 className="font-extrabold text-sm text-[var(--text)] m-0">16 חידות "זהה את התבנית"</h3>
                       <p className="text-xs text-[var(--muted)] leading-relaxed m-0">
                         השלב החשוב ביותר בהכנה! בחן את עצמך מול 16 חידות אלגוריתמיות אמיתיות ללא שם הנושא, ובדוק אם הצלחת לזהות נכון את הגישה.
@@ -1871,7 +1874,9 @@ def find_kth_largest(nums, k):
                   {/* Card 3 */}
                   <div className="bg-[var(--panel)] border border-[var(--border)] p-5 rounded-xl flex flex-col justify-between transition-all hover:shadow-md hover:border-[var(--accent)] text-right group">
                     <div className="space-y-2">
-                      <div className="text-xl">💬</div>
+                      <div className="w-10 h-10 rounded-lg bg-[var(--accent-tint)] flex items-center justify-center mb-1">
+                        <MessageSquare size={20} className="text-[var(--accent)]" />
+                      </div>
                       <h3 className="font-extrabold text-sm text-[var(--text)] m-0">צ'אט תמיכה מלווה בבינה מלאכותית</h3>
                       <p className="text-xs text-[var(--muted)] leading-relaxed m-0">
                         שאל שאלות, קבל הסברים מעמיקים מהעוזר שלנו, והעשר את ההבנה שלך לגבי כל נושא באלגוריתמים ומבני נתונים.
@@ -1888,7 +1893,9 @@ def find_kth_largest(nums, k):
                   {/* Card 4 */}
                   <div className="bg-[var(--panel)] border border-[var(--border)] p-5 rounded-xl flex flex-col justify-between transition-all hover:shadow-md hover:border-[var(--accent)] text-right group">
                     <div className="space-y-2">
-                      <div className="text-xl">⏰</div>
+                      <div className="w-10 h-10 rounded-lg bg-[var(--accent-tint)] flex items-center justify-center mb-1">
+                        <History size={20} className="text-[var(--accent)]" />
+                      </div>
                       <h3 className="font-extrabold text-sm text-[var(--text)] m-0">שינון וכרטיסיות היסטוריה</h3>
                       <p className="text-xs text-[var(--muted)] leading-relaxed m-0">
                         שמור את ההסברים הקוליים והחזותיים שיצרת בעזרת כפתור "אני לא מבין 🧠" וחזור עליהם כדי להבטיח שהכל מובן ב-100%.
@@ -1903,6 +1910,10 @@ def find_kth_largest(nums, k):
                   </div>
                 </div>
               </div>
+
+              <p className="text-center font-extrabold text-sm text-[var(--muted)] mt-16">
+                בהצלחה בראיון 💪 · זכור: זיהוי התבנית מנצח שינון פתרונות!
+              </p>
 
             </motion.div>
           )}
