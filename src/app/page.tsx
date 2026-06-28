@@ -1669,17 +1669,17 @@ def find_kth_largest(nums, k):
 
                 <div className="grid grid-cols-1 gap-6 mt-6">
                   {puzzlesData.map((p) => (
-                    <div key={p.n} className="puzzle border border-[var(--border)] bg-[var(--panel)] rounded-xl overflow-hidden shadow-xs">
-                      <div className="puzzle-head bg-black/5 dark:bg-black/30 border-b border-[var(--border)] px-5 py-3.5 flex items-center justify-between">
+                    <div key={p.n} className="puzzle border border-[var(--border)] bg-[var(--panel)] rounded-2xl overflow-hidden shadow-sm">
+                      <div className="puzzle-head bg-[var(--accent)] px-5 py-3.5 flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <span className="w-8 h-8 rounded-full bg-[var(--accent)] text-white font-extrabold flex items-center justify-center text-sm">
+                          <span className="w-8 h-8 rounded-full bg-[var(--ink)] text-[#f4efe5] font-extrabold flex items-center justify-center text-sm shrink-0">
                             {p.n}
                           </span>
-                          <span className="font-extrabold text-sm text-[var(--text)]">{p.title}</span>
+                          <span className="font-bold text-base text-white">{p.title}</span>
                         </div>
                         <button
                           onClick={() => togglePuzzle(p.n)}
-                          className="px-3 py-1.5 bg-[var(--accent-tint)] hover:brightness-95 text-[var(--accent)] font-bold text-xs rounded-lg transition cursor-pointer"
+                          className="px-3 py-1.5 bg-[var(--ink)] hover:brightness-125 text-[#f4efe5] font-bold text-xs rounded-lg transition cursor-pointer shrink-0"
                         >
                           {openPuzzles[p.n] ? "סגור תשובה" : "🔍 חשוף תשובה"}
                         </button>
