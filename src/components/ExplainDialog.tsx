@@ -57,6 +57,7 @@ export default function ExplainDialog({
   const [isPaused, setIsPaused] = useState(false);
   const [ttsProvider, setTtsProvider] = useState<TtsProvider>("edge");
   const [ttsPlaybackRate, setTtsPlaybackRate] = useState<TtsPlaybackRate>(1);
+  const [ttsVolume, setTtsVolume] = useState(1);
   const [hasCompleteTtsCache, setHasCompleteTtsCache] = useState(false);
 
   const chunksRef = useRef<string[]>([]);
@@ -131,6 +132,12 @@ export default function ExplainDialog({
       audioRef.current.playbackRate = ttsPlaybackRate;
     }
   }, [ttsPlaybackRate]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = ttsVolume;
+    }
+  }, [ttsVolume]);
 
   useEffect(() => {
     if (!isOpen || !explanation) return;
@@ -251,6 +258,7 @@ export default function ExplainDialog({
 
     if (audioRef.current) {
       audioRef.current.playbackRate = ttsPlaybackRate;
+      audioRef.current.volume = ttsVolume;
       audioRef.current.play().catch((err) => {
         setError(err.message || "Failed to resume TTS");
         stopTTS();
@@ -401,6 +409,7 @@ export default function ExplainDialog({
     
     audioRef.current = new Audio(url);
     audioRef.current.playbackRate = ttsPlaybackRate;
+    audioRef.current.volume = ttsVolume;
     audioRef.current.play().catch((err) => {
       setError(err.message || "Audio playback failed");
       stopTTS();
@@ -496,11 +505,11 @@ export default function ExplainDialog({
     setYtLoading(true);
     setYoutubeVideoId(null);
     try {
-      const cleanConcept = selectedText.length > 40 ? selectedText.substring(0, 40) : selectedText;
+      const cleanConcept = selectedText.length > 60 ? selectedText.substring(0, 60) : selectedText;
       const res = await fetch("/api/youtube-search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: cleanConcept }),
+        body: JSON.stringify({ query: cleanConcept, contextTitle }),
       });
       const data = await res.json();
       if (data.videoId) {
@@ -573,12 +582,12 @@ export default function ExplainDialog({
                   disabled={isPlaying || isPaused || ttsLoading}
                   className="bg-black/5 dark:bg-white/5 border border-[var(--border)] text-xs rounded-lg px-2 py-1.5 outline-none text-[var(--text)] font-semibold transition hover:border-[var(--accent)] focus:border-[var(--accent)] disabled:opacity-50 cursor-pointer"
                 >
-                  <option value="gemini">קריין Gemini (איכותי)</option>
-                  <option value="edge">קריין Edge (חופשי ומהיר)</option>
+                  <option value="gemini">קריין Gemini</option>
+                  <option value="edge">קריין Edge</option>
                 </select>
 
                 <div
-                  className="flex items-center gap-2 min-w-[150px] bg-black/5 dark:bg-white/5 border border-[var(--border)] rounded-lg px-2 py-1.5 transition hover:border-[var(--accent)]"
+                  className="flex items-center gap-2 bg-black/5 dark:bg-white/5 border border-[var(--border)] rounded-lg px-2 py-1.5 transition hover:border-[var(--accent)]"
                   title="מהירות הקריאה"
                 >
                   <input
@@ -589,10 +598,30 @@ export default function ExplainDialog({
                     value={ttsPlaybackRate}
                     onChange={(e) => handlePlaybackRateChange(e.target.value)}
                     aria-label="מהירות הקריאה"
-                    className="w-24 accent-[var(--accent)]"
+                    className="w-12 accent-[var(--accent)]"
                   />
                   <span className="text-xs font-black tabular-nums text-[var(--text)] min-w-10 text-center">
                     {ttsPlaybackRate.toFixed(2)}x
+                  </span>
+                </div>
+
+                <div
+                  className="flex items-center gap-2 bg-black/5 dark:bg-white/5 border border-[var(--border)] rounded-lg px-2 py-1.5 transition hover:border-[var(--accent)]"
+                  title="עוצמת הקול"
+                >
+                  <Volume2 size={14} className="text-[var(--muted)] shrink-0" />
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={ttsVolume}
+                    onChange={(e) => setTtsVolume(Number(e.target.value))}
+                    aria-label="עוצמת הקול"
+                    className="w-12 accent-[var(--accent)]"
+                  />
+                  <span className="text-xs font-black tabular-nums text-[var(--text)] min-w-10 text-center">
+                    {Math.round(ttsVolume * 100)}%
                   </span>
                 </div>
 
@@ -616,7 +645,7 @@ export default function ExplainDialog({
                   ) : (
                     <Volume2 size={14} />
                   )}
-                  {isPlaying ? "השהה" : isPaused ? "המשך" : "הקרא הסבר בקול"}
+                  {isPlaying ? "השהה" : isPaused ? "המשך" : "הקרא"}
                 </button>
 
                 <button
