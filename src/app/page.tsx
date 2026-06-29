@@ -84,6 +84,32 @@ export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [activeTab, setActiveTab] = useState<"home" | "guide" | "history">("guide");
   const [isFloatingChatOpen, setIsFloatingChatOpen] = useState(false);
+  const [isChatFullscreen, setIsChatFullscreen] = useState(false);
+  const [chatSize, setChatSize] = useState({ width: 600, height: 520 });
+
+  // Resize the floating chat by dragging its top-left corner (anchored bottom-right).
+  const handleChatResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startW = chatSize.width;
+    const startH = chatSize.height;
+    const clamp = (val: number, min: number, max: number) => Math.min(Math.max(val, min), max);
+
+    const onMove = (ev: MouseEvent) => {
+      const nextW = clamp(startW + (startX - ev.clientX), 360, window.innerWidth - 32);
+      const nextH = clamp(startH + (startY - ev.clientY), 360, window.innerHeight - 120);
+      setChatSize({ width: nextW, height: nextH });
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = "";
+    };
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
   const [highThinking, setHighThinking] = useState(false);
   const [isProgressOpen, setIsProgressOpen] = useState(false);
   const [completedPatterns, setCompletedPatterns] = useState<Record<string, boolean>>(() => {
@@ -2019,12 +2045,32 @@ def find_kth_largest(nums, k):
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 30, scale: 0.9 }}
               transition={{ duration: 0.2 }}
-              className="fixed bottom-24 z-[900] w-[600px] max-w-[calc(100vw-32px)] h-[520px] max-h-[calc(100vh-120px)] rounded-2xl shadow-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden flex flex-col right-6 lg:right-[calc(300px+1.5rem)]"
+              style={isChatFullscreen ? undefined : { width: chatSize.width, height: chatSize.height }}
+              className={`fixed z-[900] rounded-2xl shadow-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden flex flex-col ${
+                isChatFullscreen
+                  ? "inset-2 sm:inset-4"
+                  : "bottom-24 max-w-[calc(100vw-32px)] max-h-[calc(100vh-120px)] right-6 lg:right-[calc(300px+1.5rem)]"
+              }`}
             >
-              <CompanionChat 
-                user={user} 
-                onClose={() => setIsFloatingChatOpen(false)} 
+              {/* Top-left resize grip (anchored bottom-right, drag to enlarge) */}
+              {!isChatFullscreen && (
+                <div
+                  onMouseDown={handleChatResizeStart}
+                  className="absolute top-0 left-0 z-30 w-7 h-7 cursor-nwse-resize group"
+                  title="גרור כדי לשנות גודל"
+                >
+                  <span className="absolute top-[7px] left-[7px] w-3.5 h-3.5 border-t-2 border-l-2 border-[var(--muted)] group-hover:border-[var(--accent)] rounded-tl-2xl transition-colors" />
+                </div>
+              )}
+              <CompanionChat
+                user={user}
+                onClose={() => {
+                  setIsFloatingChatOpen(false);
+                  setIsChatFullscreen(false);
+                }}
                 highThinking={highThinking}
+                isFullscreen={isChatFullscreen}
+                onToggleFullscreen={() => setIsChatFullscreen((v) => !v)}
               />
             </motion.div>
           )}

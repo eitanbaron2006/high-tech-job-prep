@@ -880,3 +880,120 @@ td.mono.r {
 .companion-chat-bubble-user a {
   color: #ffffff !important;
 }
+
+/* Professional code formatting inside chat answers */
+.companion-chat-bubble pre {
+  direction: ltr;
+  text-align: left;
+  background: var(--code-bg) !important;
+  color: var(--code-text) !important;
+  font-family: var(--font-mono) !important;
+  padding: 0.85rem 1rem;
+  border-radius: 0.6rem;
+  overflow-x: auto;
+  margin: 0.6rem 0;
+  white-space: pre;
+  border: 1px solid var(--border);
+}
+
+.companion-chat-bubble pre code {
+  background: transparent !important;
+  color: inherit !important;
+  padding: 0;
+  border: none;
+  font-family: var(--font-mono) !important;
+  white-space: pre;
+}
+
+/* Inline code (single backticks) */
+.companion-chat-bubble :not(pre) > code {
+  direction: ltr;
+  font-family: var(--font-mono) !important;
+  background: var(--bg);
+  color: #b5601f;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--border);
+  word-break: break-word;
+}
+
+[data-theme="dark"] .companion-chat-bubble :not(pre) > code {
+  color: #f0a868;
+}
+
+/* Strip the backtick pseudo-content that prose adds around code */
+.companion-chat-bubble code::before,
+.companion-chat-bubble code::after {
+  content: none !important;
+}
+
+/* In the user (orange) bubble code blocks stay on the dark slab, not white-on-orange */
+.companion-chat-bubble-user :not(pre) > code {
+  background: rgba(0, 0, 0, 0.25);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff !important;
+}
+
+/* ====================================================== */
+/* Syntax highlighting theme for chat code (editor-like)  */
+/* highlight.js token classes — colorful & readable       */
+/* ====================================================== */
+.companion-chat-bubble .hljs {
+  color: #e6dfd2 !important;
+  background: transparent !important;
+}
+.companion-chat-bubble .hljs-comment,
+.companion-chat-bubble .hljs-quote {
+  color: #8b9099 !important;
+  font-style: italic;
+}
+.companion-chat-bubble .hljs-keyword,
+.companion-chat-bubble .hljs-selector-tag,
+.companion-chat-bubble .hljs-literal,
+.companion-chat-bubble .hljs-doctag {
+  color: #ff7b72 !important;
+}
+.companion-chat-bubble .hljs-string,
+.companion-chat-bubble .hljs-regexp,
+.companion-chat-bubble .hljs-meta .hljs-string {
+  color: #7ee787 !important;
+}
+.companion-chat-bubble .hljs-number,
+.companion-chat-bubble .hljs-symbol,
+.companion-chat-bubble .hljs-bullet {
+  color: #ffab70 !important;
+}
+.companion-chat-bubble .hljs-title,
+.companion-chat-bubble .hljs-title.function_,
+.companion-chat-bubble .hljs-section,
+.companion-chat-bubble .hljs-name {
+  color: #d2a8ff !important;
+}
+.companion-chat-bubble .hljs-built_in,
+.companion-chat-bubble .hljs-class .hljs-title,
+.companion-chat-bubble .hljs-title.class_,
+.companion-chat-bubble .hljs-type {
+  color: #ffa657 !important;
+}
+.companion-chat-bubble .hljs-attr,
+.companion-chat-bubble .hljs-attribute,
+.companion-chat-bubble .hljs-variable,
+.companion-chat-bubble .hljs-template-variable,
+.companion-chat-bubble .hljs-property,
+.companion-chat-bubble .hljs-params {
+  color: #79c0ff !important;
+}
+.companion-chat-bubble .hljs-operator,
+.companion-chat-bubble .hljs-punctuation {
+  color: #d6cdbf !important;
+}
+.companion-chat-bubble .hljs-meta,
+.companion-chat-bubble .hljs-comment .hljs-doctag {
+  color: #ffa657 !important;
+}
+.companion-chat-bubble .hljs-emphasis {
+  font-style: italic;
+}
+.companion-chat-bubble .hljs-strong {
+  font-weight: 700;
+}

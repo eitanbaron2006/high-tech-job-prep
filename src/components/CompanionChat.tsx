@@ -4,28 +4,33 @@ import { User } from "firebase/auth";
 import { collection, addDoc, updateDoc, doc, Timestamp } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
 import ReactMarkdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
 import {
   NEW_CHAT_TITLE,
   createChatTitleFromMessage,
   createFreshChatThread,
 } from "../lib/chat-thread";
-import { 
-  Send, 
-  Bot, 
-  User as UserIcon, 
-  Loader2, 
-  Plus, 
+import {
+  Send,
+  Bot,
+  User as UserIcon,
+  Loader2,
+  Plus,
   MessageSquare,
-  X
+  X,
+  Maximize2,
+  Minimize2
 } from "lucide-react";
 
 interface CompanionChatProps {
   user: User | null;
   onClose?: () => void;
   highThinking?: boolean;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
 }
 
-export default function CompanionChat({ user, onClose, highThinking = false }: CompanionChatProps) {
+export default function CompanionChat({ user, onClose, highThinking = false, isFullscreen = false, onToggleFullscreen }: CompanionChatProps) {
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -182,6 +187,15 @@ export default function CompanionChat({ user, onClose, highThinking = false }: C
             <Plus size={14} />
             שיחה חדשה
           </button>
+          {onToggleFullscreen && (
+            <button
+              onClick={onToggleFullscreen}
+              className="p-1.5 hover:bg-[var(--accent-tint)] text-[var(--muted)] hover:text-[var(--text)] rounded-lg transition cursor-pointer"
+              title={isFullscreen ? "צא ממסך מלא" : "מסך מלא"}
+            >
+              {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            </button>
+          )}
           {onClose && (
             <button
               onClick={onClose}
@@ -224,7 +238,9 @@ export default function CompanionChat({ user, onClose, highThinking = false }: C
                   style={{ fontSize: "0.8rem" }}
                 >
                   <div className="prose prose-sm max-w-none text-inherit dark:prose-invert" style={{ fontSize: "inherit" }}>
-                    <ReactMarkdown>{m.text}</ReactMarkdown>
+                    <ReactMarkdown rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}>
+                      {m.text}
+                    </ReactMarkdown>
                   </div>
                 </div>
               </div>
