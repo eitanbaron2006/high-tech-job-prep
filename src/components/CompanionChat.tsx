@@ -10,6 +10,7 @@ import {
   createChatTitleFromMessage,
   createFreshChatThread,
 } from "../lib/chat-thread";
+import { saveGeneratedImage, downloadImage } from "../lib/gallery";
 import {
   Send,
   Bot,
@@ -19,8 +20,16 @@ import {
   MessageSquare,
   X,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Download
 } from "lucide-react";
+
+// Firestore documents are capped at 1MB, so a base64 image must never be
+// persisted inside a chat thread — the image itself lives in Storage/the gallery.
+const stripInlineImages = (messages: ChatMessage[]): ChatMessage[] =>
+  messages.map((m) =>
+    m.imageUrl && m.imageUrl.startsWith("data:") ? { ...m, imageUrl: undefined } : m
+  );
 
 interface CompanionChatProps {
   user: User | null;
@@ -28,14 +37,43 @@ interface CompanionChatProps {
   highThinking?: boolean;
   isFullscreen?: boolean;
   onToggleFullscreen?: () => void;
+  onAutoWidth?: (width: number) => void;
+  onImageGenerated?: () => void;
 }
 
-export default function CompanionChat({ user, onClose, highThinking = false, isFullscreen = false, onToggleFullscreen }: CompanionChatProps) {
+export default function CompanionChat({ user, onClose, highThinking = false, isFullscreen = false, onToggleFullscreen, onAutoWidth, onImageGenerated }: CompanionChatProps) {
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesRef = useRef<HTMLDivElement | null>(null);
+
+  // Auto-fit: report the widest natural content (code blocks / images) so the
+  // floating window can grow to fit it.
+  const measureContentWidth = () => {
+    const el = messagesRef.current;
+    if (!el || !onAutoWidth) return;
+    let maxW = 0;
+    el.querySelectorAll("pre").forEach((n) => {
+      maxW = Math.max(maxW, (n as HTMLElement).scrollWidth);
+    });
+    el.querySelectorAll("img").forEach((n) => {
+      const img = n as HTMLImageElement;
+      maxW = Math.max(maxW, Math.min(img.naturalWidth || 0, 520));
+    });
+    if (maxW > 0) onAutoWidth(maxW + 130);
+  };
+
+  useEffect(() => {
+    measureContentWidth();
+    const el = messagesRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => measureContentWidth());
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeThread?.messages]);
 
   // Start each chat surface with one active conversation only.
   useEffect(() => {
@@ -105,11 +143,34 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
-      const aiMsg: ChatMessage = {
-        sender: "ai",
-        text: data.response,
-        createdAt: Date.now(),
-      };
+      let aiMsg: ChatMessage;
+      if (data.type === "image" && data.imageUrl) {
+        // Persist to the gallery first, then keep the lightweight Storage URL in
+        // the chat message — a base64 data URL would blow Firestore's 1MB limit.
+        let displayUrl: string = data.imageUrl;
+        try {
+          const saved = await saveGeneratedImage(user?.uid || null, data.imageUrl, data.prompt || messageText);
+          displayUrl = saved.url;
+          onImageGenerated?.();
+        } catch (err) {
+          console.error("Failed to save generated image:", err);
+        }
+        aiMsg = {
+          sender: "ai",
+          text: data.prompt
+            ? `הנה התרשים שיצרתי עבורך: ${data.prompt}`
+            : "הנה התרשים שיצרתי עבורך:",
+          imageUrl: displayUrl,
+          imagePrompt: data.prompt || messageText,
+          createdAt: Date.now(),
+        };
+      } else {
+        aiMsg = {
+          sender: "ai",
+          text: data.response,
+          createdAt: Date.now(),
+        };
+      }
 
       const finalMessages = [...updatedMessages, aiMsg];
       const finalThread = { ...updatedThread, messages: finalMessages };
@@ -122,7 +183,7 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
           const docRef = await addDoc(collection(db, "chats"), {
             userId: user.uid,
             title: finalThread.title,
-            messages: finalMessages,
+            messages: stripInlineImages(finalMessages),
             createdAt: Timestamp.now().toDate().toISOString(),
           });
           setActiveThread({ ...finalThread, id: docRef.id });
@@ -132,7 +193,7 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
       } else if (user) {
         try {
           await updateDoc(doc(db, "chats", activeThread.id), {
-            messages: finalMessages,
+            messages: stripInlineImages(finalMessages),
             title: finalThread.title,
           });
         } catch (err) {
@@ -214,8 +275,8 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
         <div className="flex-1 flex flex-col bg-[var(--bg)] overflow-hidden">
           
           {/* Messages list */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            
+          <div ref={messagesRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+
             {activeThread?.messages.map((m, idx) => (
               <div
                 key={idx}
@@ -242,6 +303,27 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
                       {m.text}
                     </ReactMarkdown>
                   </div>
+
+                  {m.imageUrl && (
+                    <div className="mt-2 relative group">
+                      <img
+                        src={m.imageUrl}
+                        alt={m.imagePrompt || "תמונה שנוצרה"}
+                        onLoad={measureContentWidth}
+                        className="rounded-xl border border-[var(--border)] max-w-full w-[460px] max-h-[420px] object-contain bg-white"
+                      />
+                      <button
+                        onClick={() =>
+                          downloadImage(m.imageUrl!, `algobuddy-${m.createdAt}.png`)
+                        }
+                        className="absolute top-2 left-2 flex items-center gap-1.5 bg-black/70 hover:bg-black/85 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg transition cursor-pointer opacity-0 group-hover:opacity-100"
+                        title="הורד תמונה"
+                      >
+                        <Download size={13} />
+                        הורד
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -288,7 +370,7 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="כתוב הודעה, שאל על קטע קוד או בקש סימולציה..."
+              placeholder="כתוב הודעה, בקש סימולציה או בקש תמונה/אינפוגרפיקה..."
               className="flex-1 bg-[var(--bg)] text-[var(--text)] border border-[var(--border)] rounded-xl px-4 py-3 text-sm outline-none focus:border-[var(--accent)] transition"
             />
             <button

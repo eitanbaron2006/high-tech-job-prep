@@ -7,9 +7,9 @@ import {
   onAuthStateChanged,
   User as FirebaseUser
 } from "firebase/auth";
-import { 
-  getFirestore, 
-  doc, 
+import {
+  getFirestore,
+  doc,
   getDocFromServer,
   collection,
   addDoc,
@@ -21,6 +21,7 @@ import {
   deleteDoc,
   Timestamp
 } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 // Config loaded directly from provisioned firebase-applet-config.json
 const firebaseConfig = {
@@ -40,6 +41,7 @@ export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+export const storage = getStorage(app);
 
 export enum OperationType {
   CREATE = 'create',

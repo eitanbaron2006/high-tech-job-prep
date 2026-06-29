@@ -13,7 +13,18 @@ export interface ExplanationItem {
 export interface ChatMessage {
   sender: "user" | "ai";
   text: string;
+  imageUrl?: string;
+  imagePrompt?: string;
   createdAt: number;
+}
+
+export interface GeneratedImage {
+  id: string;
+  userId: string;
+  url: string;
+  prompt: string;
+  storagePath?: string;
+  createdAt: string;
 }
 
 export interface ChatThread {

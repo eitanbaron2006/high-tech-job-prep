@@ -86,10 +86,23 @@ export default function App() {
   const [isFloatingChatOpen, setIsFloatingChatOpen] = useState(false);
   const [isChatFullscreen, setIsChatFullscreen] = useState(false);
   const [chatSize, setChatSize] = useState({ width: 600, height: 520 });
+  const [chatAutoFit, setChatAutoFit] = useState(true);
+
+  // Auto-fit: grow the chat window to fit wide content (code blocks / images),
+  // up to the viewport. Never shrinks, and yields to manual resize / fullscreen.
+  const applyChatAutoWidth = (desired: number) => {
+    if (!chatAutoFit || isChatFullscreen) return;
+    const max = (typeof window !== "undefined" ? window.innerWidth : 1200) - 32;
+    setChatSize((prev) => ({
+      ...prev,
+      width: Math.min(Math.max(desired, prev.width), max),
+    }));
+  };
 
   // Resize the floating chat by dragging its top-left corner (anchored bottom-right).
   const handleChatResizeStart = (e: React.MouseEvent) => {
     e.preventDefault();
+    setChatAutoFit(false); // manual resize takes over from auto-fit
     const startX = e.clientX;
     const startY = e.clientY;
     const startW = chatSize.width;
@@ -2067,10 +2080,13 @@ def find_kth_largest(nums, k):
                 onClose={() => {
                   setIsFloatingChatOpen(false);
                   setIsChatFullscreen(false);
+                  setChatAutoFit(true);
+                  setChatSize({ width: 600, height: 520 });
                 }}
                 highThinking={highThinking}
                 isFullscreen={isChatFullscreen}
                 onToggleFullscreen={() => setIsChatFullscreen((v) => !v)}
+                onAutoWidth={applyChatAutoWidth}
               />
             </motion.div>
           )}
