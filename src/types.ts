@@ -25,6 +25,7 @@ export interface GeneratedImage {
   prompt: string;
   storagePath?: string;
   createdAt: string;
+  localOnly?: boolean;
 }
 
 export interface ChatThread {

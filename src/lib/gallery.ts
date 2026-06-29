@@ -1,6 +1,6 @@
 import {
   ref as storageRef,
-  uploadString,
+  uploadBytes,
   getDownloadURL,
   deleteObject,
 } from "firebase/storage";
@@ -14,61 +14,51 @@ import {
   deleteDoc,
   doc,
 } from "firebase/firestore";
-import { db, storage } from "../firebase";
-import { GeneratedImage } from "../types";
+import { db, storage } from "../firebase.ts";
+import type { GeneratedImage } from "../types.ts";
+import {
+  dataUrlToBlob,
+  getGeneratedImagesFromChatThreads,
+  getGuestImages,
+  getLocalImages,
+  getLocalImagesStorageKey,
+  isFirebaseStorageRetryLimitError,
+  mergeGeneratedImages,
+  saveGeneratedImageWithDeps,
+  setLocalImages,
+} from "./gallery-core.ts";
 
-const GUEST_KEY = "guest_images";
-
-export const getGuestImages = (): GeneratedImage[] => {
-  try {
-    return JSON.parse(localStorage.getItem(GUEST_KEY) || "[]");
-  } catch {
-    return [];
-  }
-};
-
-const setGuestImages = (images: GeneratedImage[]) => {
-  // Keep guest storage from growing unbounded (data URLs are heavy).
-  localStorage.setItem(GUEST_KEY, JSON.stringify(images.slice(0, 30)));
+export {
+  dataUrlToBlob,
+  getGeneratedImagesFromChatThreads,
+  getGuestImages,
+  getLocalImages,
+  getLocalImagesStorageKey,
+  isFirebaseStorageRetryLimitError,
+  mergeGeneratedImages,
+  saveGeneratedImageWithDeps,
 };
 
 /**
  * Persists a generated image. Logged-in users get the image uploaded to
- * Firebase Storage with a Firestore record; guests are stored locally.
+ * Firebase Storage with a Firestore record; failed cloud saves fall back to
+ * local per-user storage so the gallery still works on this device.
  */
 export async function saveGeneratedImage(
   userId: string | null,
   dataUrl: string,
   prompt: string
 ): Promise<GeneratedImage> {
-  const createdAt = new Date().toISOString();
-
-  if (!userId) {
-    const item: GeneratedImage = {
-      id: "local_" + Date.now(),
-      userId: "guest",
-      url: dataUrl,
-      prompt,
-      createdAt,
-    };
-    setGuestImages([item, ...getGuestImages()]);
-    return item;
-  }
-
-  const path = `generated-images/${userId}/${Date.now()}.png`;
-  const fileRef = storageRef(storage, path);
-  await uploadString(fileRef, dataUrl, "data_url");
-  const url = await getDownloadURL(fileRef);
-
-  const docRef = await addDoc(collection(db, "images"), {
-    userId,
-    prompt,
-    url,
-    storagePath: path,
-    createdAt,
+  return saveGeneratedImageWithDeps(userId, dataUrl, prompt, {
+    now: () => Date.now(),
+    getLocalImages,
+    setLocalImages,
+    uploadImage: async (path, blob, metadata) => {
+      await uploadBytes(storageRef(storage, path), blob, metadata);
+    },
+    getImageDownloadUrl: async (path) => getDownloadURL(storageRef(storage, path)),
+    addImageDoc: async (data) => addDoc(collection(db, "images"), data),
   });
-
-  return { id: docRef.id, userId, url, prompt, storagePath: path, createdAt };
 }
 
 export async function fetchUserImages(userId: string): Promise<GeneratedImage[]> {
@@ -97,8 +87,8 @@ export async function deleteGeneratedImage(
   item: GeneratedImage,
   userId: string | null
 ): Promise<void> {
-  if (!userId) {
-    setGuestImages(getGuestImages().filter((i) => i.id !== item.id));
+  if (!userId || item.localOnly || item.id.startsWith("local_")) {
+    setLocalImages(userId, getLocalImages(userId).filter((i) => i.id !== item.id));
     return;
   }
   await deleteDoc(doc(db, "images", item.id));
@@ -106,7 +96,7 @@ export async function deleteGeneratedImage(
     try {
       await deleteObject(storageRef(storage, item.storagePath));
     } catch (err) {
-      // Storage object may already be gone — the Firestore record is what matters.
+      // Storage object may already be gone; the Firestore record is what matters.
       console.warn("[gallery] failed to delete storage object:", err);
     }
   }

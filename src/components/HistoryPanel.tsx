@@ -3,7 +3,21 @@ import { ExplanationItem, ChatThread, GeneratedImage } from "../types";
 import { User } from "firebase/auth";
 import { collection, getDocs, query, where, orderBy, deleteDoc, doc } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
-import { fetchUserImages, getGuestImages, deleteGeneratedImage, downloadImage } from "../lib/gallery";
+import {
+  fetchUserImages,
+  getGeneratedImagesFromChatThreads,
+  getLocalImages,
+  getGuestImages,
+  mergeGeneratedImages,
+  deleteGeneratedImage,
+  downloadImage,
+} from "../lib/gallery";
+import {
+  LEGACY_GUEST_CHAT_HISTORY_KEY,
+  getActiveChatStorageKey,
+  getChatHistoryStorageKey,
+  mergeChatThreads,
+} from "../lib/chat-thread";
 import {
   History,
   Trash2,
@@ -16,7 +30,10 @@ import {
   BookOpen,
   Calendar,
   Loader2,
-  Download
+  Download,
+  ChevronDown,
+  Bot,
+  UserCircle
 } from "lucide-react";
 
 interface HistoryPanelProps {
@@ -30,6 +47,20 @@ export default function HistoryPanel({ user, onOpenExplanation }: HistoryPanelPr
   const [images, setImages] = useState<GeneratedImage[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"explanations" | "chats" | "images">("explanations");
+  const [expandedChatId, setExpandedChatId] = useState<string | null>(null);
+
+  const readLocalChats = (userId: string | null): ChatThread[] => {
+    try {
+      const primary = JSON.parse(localStorage.getItem(getChatHistoryStorageKey(userId)) || "[]");
+      const legacy = userId ? [] : JSON.parse(localStorage.getItem(LEGACY_GUEST_CHAT_HISTORY_KEY) || "[]");
+      const activeRaw = localStorage.getItem(getActiveChatStorageKey(userId));
+      const active = activeRaw ? [JSON.parse(activeRaw)] : [];
+      return mergeChatThreads(primary, legacy, active);
+    } catch (e) {
+      console.error("Error loading local chats:", e);
+      return [];
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -68,7 +99,6 @@ export default function HistoryPanel({ user, onOpenExplanation }: HistoryPanelPr
         });
       } catch (err) {
         console.error("Error loading explanations:", err);
-        handleFirestoreError(err, OperationType.GET, "explanations");
       }
       setExplanations(expList);
 
@@ -93,16 +123,24 @@ export default function HistoryPanel({ user, onOpenExplanation }: HistoryPanelPr
         });
       } catch (err) {
         console.error("Error loading chats:", err);
-        handleFirestoreError(err, OperationType.GET, "chats");
       }
-      setChats(chatList);
+      const localChats = readLocalChats(user.uid);
+      setChats(mergeChatThreads(chatList, localChats));
 
       // 3. Fetch generated image gallery
       try {
-        setImages(await fetchUserImages(user.uid));
+        setImages(
+          mergeGeneratedImages(
+            await fetchUserImages(user.uid),
+            getLocalImages(user.uid),
+            getGeneratedImagesFromChatThreads(localChats)
+          )
+        );
       } catch (err) {
         console.error("Error loading images:", err);
-        handleFirestoreError(err, OperationType.GET, "images");
+        setImages(
+          mergeGeneratedImages(getLocalImages(user.uid), getGeneratedImagesFromChatThreads(localChats))
+        );
       }
     } catch (err) {
       console.error("Error loading history from database:", err);
@@ -112,17 +150,11 @@ export default function HistoryPanel({ user, onOpenExplanation }: HistoryPanelPr
   };
 
   const loadGuestLocalHistory = () => {
-    const localChats = localStorage.getItem("guest_chats");
-    if (localChats) {
-      try {
-        setChats(JSON.parse(localChats));
-      } catch (e) {
-        console.error(e);
-      }
-    }
+    const localChats = readLocalChats(null);
+    setChats(localChats);
     // Set empty explanations for guests
     setExplanations([]);
-    setImages(getGuestImages());
+    setImages(mergeGeneratedImages(getGuestImages(), getGeneratedImagesFromChatThreads(localChats)));
   };
 
   const handleDeleteImage = async (item: GeneratedImage, e: React.MouseEvent) => {
@@ -313,23 +345,65 @@ export default function HistoryPanel({ user, onOpenExplanation }: HistoryPanelPr
             {chats.map((chat) => (
               <div
                 key={chat.id}
-                className="bg-[var(--bg)] border border-[var(--border)] p-4 rounded-xl flex items-center justify-between transition shadow-xs"
+                className="bg-[var(--bg)] border border-[var(--border)] p-4 rounded-xl transition shadow-xs"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 bg-[var(--accent-tint)] text-[var(--accent)] rounded-lg flex items-center justify-center shrink-0">
-                    <MessageSquare size={16} />
+                <button
+                  onClick={() => setExpandedChatId((id) => (id === chat.id ? null : chat.id))}
+                  className="w-full flex items-center justify-between gap-3 text-right"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-[var(--accent-tint)] text-[var(--accent)] rounded-lg flex items-center justify-center shrink-0">
+                      <MessageSquare size={16} />
+                    </div>
+                    <div>
+                      <h4 className="font-extrabold text-sm text-[var(--text)]">{chat.title}</h4>
+                      <p className="text-xs text-[var(--muted)] mt-0.5">
+                        {chat.messages.length} הודעות בשיחה · נוצר ב-{formatDate(chat.createdAt)}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="font-extrabold text-sm text-[var(--text)]">{chat.title}</h4>
-                    <p className="text-xs text-[var(--muted)] mt-0.5">
-                      {chat.messages.length} הודעות בשיחה · נוצר ב-{formatDate(chat.createdAt)}
-                    </p>
-                  </div>
-                </div>
 
-                <span className="text-xs font-bold text-[var(--muted)]">
-                  נשמר בהיסטוריה
-                </span>
+                  <span className="text-xs font-bold text-[var(--accent)] flex items-center gap-1">
+                    {expandedChatId === chat.id ? "סגור" : "פתח שיחה"}
+                    <ChevronDown
+                      size={14}
+                      className={`transition ${expandedChatId === chat.id ? "rotate-180" : ""}`}
+                    />
+                  </span>
+                </button>
+
+                {expandedChatId === chat.id && (
+                  <div className="mt-4 border-t border-[var(--border)] pt-3 space-y-2 max-h-[420px] overflow-y-auto">
+                    {chat.messages.map((message, idx) => (
+                      <div
+                        key={`${chat.id}-${idx}`}
+                        className={`flex gap-2 ${
+                          message.sender === "user" ? "justify-start" : "justify-end"
+                        }`}
+                      >
+                        <div
+                          className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
+                            message.sender === "user"
+                              ? "bg-[var(--text)] text-[var(--bg)]"
+                              : "bg-[var(--accent-tint)] text-[var(--accent)] border border-[var(--accent)]"
+                          }`}
+                        >
+                          {message.sender === "user" ? <UserCircle size={14} /> : <Bot size={14} />}
+                        </div>
+                        <div className="max-w-[78%] bg-[var(--panel)] border border-[var(--border)] rounded-xl px-3 py-2 text-xs leading-relaxed text-[var(--text)] whitespace-pre-wrap">
+                          {message.text}
+                          {message.imageUrl && (
+                            <img
+                              src={message.imageUrl}
+                              alt={message.imagePrompt || "תמונה מהשיחה"}
+                              className="mt-2 rounded-lg border border-[var(--border)] max-h-48 object-contain bg-white"
+                            />
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

@@ -3,6 +3,7 @@ import { ai, getModelName } from "../../../lib/gemini";
 import { generateEducationalImage } from "../../../lib/imageGen";
 
 const IMAGE_MARKER = "@@IMAGE@@";
+const containsHebrew = (text: string): boolean => /[\u0590-\u05FF]/.test(text);
 
 export async function POST(req: Request) {
   try {
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
 
       יצירת תמונות:
       - אם — ורק אם — המשתמש מבקש במפורש תמונה / איור / אינפוגרפיקה / תרשים / דיאגרמה / "צייר" / "צור תמונה" / "הראה לי ויזואלית", אל תכתוב תשובה טקסטואלית רגילה.
-      - במקרה כזה החזר שורה אחת בלבד, בדיוק בפורמט הזה: ${IMAGE_MARKER} <תיאור קצר וברור באנגלית של התמונה שצריך לצייר>. בלי שום טקסט נוסף לפני או אחרי.
+      - במקרה כזה החזר שורה אחת בלבד, בדיוק בפורמט הזה: ${IMAGE_MARKER} <תיאור קצר וברור של התמונה שצריך לצייר, בשפת המשתמש>. בלי שום טקסט נוסף לפני או אחרי.
       - בכל מקרה אחר (שאלות, הסברים, סימולציות) — ענה כרגיל בעברית, ואל תשתמש בסימון הזה.
     `;
 
@@ -52,7 +53,8 @@ export async function POST(req: Request) {
     // The model signalled that the user asked for a visual — generate it.
     if (text.startsWith(IMAGE_MARKER)) {
       const lastUserText = [...messages].reverse().find((m: any) => m.role !== "assistant")?.text || "";
-      const imagePrompt = text.slice(IMAGE_MARKER.length).trim() || lastUserText;
+      const markerPrompt = text.slice(IMAGE_MARKER.length).trim();
+      const imagePrompt = containsHebrew(lastUserText) ? lastUserText : markerPrompt || lastUserText;
       try {
         const imageUrl = await generateEducationalImage(imagePrompt);
         return NextResponse.json({ type: "image", imageUrl, prompt: imagePrompt });

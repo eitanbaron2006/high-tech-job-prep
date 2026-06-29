@@ -1,13 +1,20 @@
 import { GoogleGenAI } from "@google/genai";
 
-export const getAiClient = (forceAiStudio = false) => {
+export const resolveVertexLocation = (location?: string): string => location || "us-central1";
+
+export const getAiClient = (
+  forceAiStudio = false,
+  vertexLocation?: string,
+  timeoutMs?: number
+) => {
   const useVertex = !forceAiStudio && (process.env.USE_VERTEX_AI === "true" || !!process.env.VERTEX_PROJECT_ID);
   
   return useVertex
     ? new GoogleGenAI({
         vertexai: true,
         project: process.env.VERTEX_PROJECT_ID,
-        location: process.env.VERTEX_LOCATION === "global" ? "us-central1" : (process.env.VERTEX_LOCATION || "us-central1"),
+        location: resolveVertexLocation(vertexLocation || process.env.VERTEX_LOCATION),
+        httpOptions: timeoutMs ? { timeout: timeoutMs } : undefined,
       })
     : new GoogleGenAI({
         apiKey: process.env.GEMINI_API_KEY || "",
@@ -15,6 +22,7 @@ export const getAiClient = (forceAiStudio = false) => {
           headers: {
             "User-Agent": "aistudio-build",
           },
+          ...(timeoutMs ? { timeout: timeoutMs } : {}),
         },
       });
 };

@@ -42,6 +42,7 @@ export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 export const storage = getStorage(app);
+storage.maxUploadRetryTime = 120_000;
 
 export enum OperationType {
   CREATE = 'create',

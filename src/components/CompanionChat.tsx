@@ -2,13 +2,18 @@ import React, { useState, useEffect, useRef } from "react";
 import { ChatMessage, ChatThread } from "../types";
 import { User } from "firebase/auth";
 import { collection, addDoc, updateDoc, doc, Timestamp } from "firebase/firestore";
-import { db, handleFirestoreError, OperationType } from "../firebase";
+import { db } from "../firebase";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import {
+  LEGACY_GUEST_CHAT_HISTORY_KEY,
   NEW_CHAT_TITLE,
   createChatTitleFromMessage,
-  createFreshChatThread,
+  getActiveChatStorageKey,
+  getChatHistoryStorageKey,
+  resolveInitialChatThread,
+  sanitizeChatMessagesForStorage,
+  upsertChatThread,
 } from "../lib/chat-thread";
 import { saveGeneratedImage, downloadImage } from "../lib/gallery";
 import {
@@ -24,12 +29,7 @@ import {
   Download
 } from "lucide-react";
 
-// Firestore documents are capped at 1MB, so a base64 image must never be
-// persisted inside a chat thread — the image itself lives in Storage/the gallery.
-const stripInlineImages = (messages: ChatMessage[]): ChatMessage[] =>
-  messages.map((m) =>
-    m.imageUrl && m.imageUrl.startsWith("data:") ? { ...m, imageUrl: undefined } : m
-  );
+const CHAT_REQUEST_TIMEOUT_MS = 180_000;
 
 interface CompanionChatProps {
   user: User | null;
@@ -42,12 +42,18 @@ interface CompanionChatProps {
 }
 
 export default function CompanionChat({ user, onClose, highThinking = false, isFullscreen = false, onToggleFullscreen, onAutoWidth, onImageGenerated }: CompanionChatProps) {
+  const currentUserId = user?.uid || "guest";
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const messagesRef = useRef<HTMLDivElement | null>(null);
+  const latestUserMessage =
+    [...(activeThread?.messages || [])].reverse().find((m) => m.sender === "user")?.text || "";
+  const isWaitingForImage = /תמונה|איור|אינפוגרפיקה|תרשים|דיאגרמה|צייר|ויזואלית|cheat sheet/i.test(
+    latestUserMessage
+  );
 
   // Auto-fit: report the widest natural content (code blocks / images) so the
   // floating window can grow to fit it.
@@ -75,10 +81,37 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeThread?.messages]);
 
-  // Start each chat surface with one active conversation only.
+  const getStoredActiveThread = (): ChatThread | null => {
+    try {
+      const rawThread = localStorage.getItem(getActiveChatStorageKey(currentUserId));
+      return rawThread ? JSON.parse(rawThread) : null;
+    } catch (e) {
+      console.error(e);
+      return null;
+    }
+  };
+
+  // Restore the user's active conversation unless they explicitly start a new one.
   useEffect(() => {
-    createNewThread();
-  }, [user]);
+    setInput("");
+    setActiveThread(
+      resolveInitialChatThread({
+        storedThread: getStoredActiveThread(),
+        userId: currentUserId,
+        now: new Date(),
+      })
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserId]);
+
+  useEffect(() => {
+    if (!activeThread || activeThread.userId !== currentUserId) return;
+    try {
+      localStorage.setItem(getActiveChatStorageKey(currentUserId), JSON.stringify(activeThread));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [activeThread, currentUserId]);
 
   // Scroll to bottom when messages update
   useEffect(() => {
@@ -86,22 +119,38 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
   }, [activeThread?.messages, loading]);
 
   const createNewThread = () => {
-    const newThread = createFreshChatThread({
-      id: "temp_" + Date.now(),
-      userId: user?.uid || "guest",
-      createdAt: new Date().toISOString(),
+    const now = new Date();
+    const newThread = resolveInitialChatThread({
+      storedThread: null,
+      userId: currentUserId,
+      now,
     });
 
     setInput("");
     setActiveThread(newThread);
   };
 
-  const getGuestThreads = (): ChatThread[] => {
+  const getStoredChatHistory = (): ChatThread[] => {
     try {
-      return JSON.parse(localStorage.getItem("guest_chats") || "[]");
+      const primary = JSON.parse(localStorage.getItem(getChatHistoryStorageKey(currentUserId)) || "[]");
+      if (currentUserId !== "guest") return primary;
+      const legacy = JSON.parse(localStorage.getItem(LEGACY_GUEST_CHAT_HISTORY_KEY) || "[]");
+      return [...primary, ...legacy];
     } catch (e) {
       console.error(e);
       return [];
+    }
+  };
+
+  const persistLocalChatHistory = (thread: ChatThread, previousId?: string) => {
+    try {
+      const nextThreads = upsertChatThread(getStoredChatHistory(), thread, previousId);
+      localStorage.setItem(getChatHistoryStorageKey(currentUserId), JSON.stringify(nextThreads));
+      if (currentUserId === "guest") {
+        localStorage.setItem(LEGACY_GUEST_CHAT_HISTORY_KEY, JSON.stringify(nextThreads));
+      }
+    } catch (e) {
+      console.error("Failed to save local chat history:", e);
     }
   };
 
@@ -135,35 +184,64 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
         text: m.text,
       }));
 
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: apiMessages, highThinking }),
-      });
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), CHAT_REQUEST_TIMEOUT_MS);
+      let res: Response;
+      try {
+        res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: apiMessages, highThinking }),
+          signal: controller.signal,
+        });
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
       let aiMsg: ChatMessage;
       if (data.type === "image" && data.imageUrl) {
-        // Persist to the gallery first, then keep the lightweight Storage URL in
-        // the chat message — a base64 data URL would blow Firestore's 1MB limit.
-        let displayUrl: string = data.imageUrl;
-        try {
-          const saved = await saveGeneratedImage(user?.uid || null, data.imageUrl, data.prompt || messageText);
-          displayUrl = saved.url;
-          onImageGenerated?.();
-        } catch (err) {
-          console.error("Failed to save generated image:", err);
-        }
+        const imageCreatedAt = Date.now();
         aiMsg = {
           sender: "ai",
           text: data.prompt
             ? `הנה התרשים שיצרתי עבורך: ${data.prompt}`
             : "הנה התרשים שיצרתי עבורך:",
-          imageUrl: displayUrl,
+          imageUrl: data.imageUrl,
           imagePrompt: data.prompt || messageText,
-          createdAt: Date.now(),
+          createdAt: imageCreatedAt,
         };
+
+        // Show the generated image immediately. Gallery persistence can be slow
+        // or fail independently, and must not keep the chat in a loading state.
+        void saveGeneratedImage(user?.uid || null, data.imageUrl, data.prompt || messageText)
+          .then((saved) => {
+            onImageGenerated?.();
+            setActiveThread((prev) => {
+              if (!prev) return prev;
+              const nextThread = {
+                ...prev,
+                messages: prev.messages.map((m) =>
+                  m.sender === "ai" && m.createdAt === imageCreatedAt
+                    ? { ...m, imageUrl: saved.url }
+                    : m
+                ),
+              };
+              persistLocalChatHistory(nextThread);
+              if (user && !nextThread.id.startsWith("temp_") && !saved.localOnly) {
+                void updateDoc(doc(db, "chats", nextThread.id), {
+                  messages: sanitizeChatMessagesForStorage(nextThread.messages),
+                }).catch((err) => {
+                  console.error("Failed to update chat image URL in history:", err);
+                });
+              }
+              return nextThread;
+            });
+          })
+          .catch((err) => {
+            console.error("Failed to save generated image:", err);
+          });
       } else {
         aiMsg = {
           sender: "ai",
@@ -176,6 +254,8 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
       const finalThread = { ...updatedThread, messages: finalMessages };
 
       setActiveThread(finalThread);
+      setLoading(false);
+      persistLocalChatHistory(finalThread);
 
       // Save database sync
       if (user && activeThread.id.startsWith("temp_")) {
@@ -183,35 +263,35 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
           const docRef = await addDoc(collection(db, "chats"), {
             userId: user.uid,
             title: finalThread.title,
-            messages: stripInlineImages(finalMessages),
+            messages: sanitizeChatMessagesForStorage(finalMessages),
             createdAt: Timestamp.now().toDate().toISOString(),
           });
-          setActiveThread({ ...finalThread, id: docRef.id });
+          const savedThread = { ...finalThread, id: docRef.id };
+          persistLocalChatHistory(savedThread, finalThread.id);
+          setActiveThread((prev) => (prev ? { ...prev, id: docRef.id } : savedThread));
         } catch (err) {
-          handleFirestoreError(err, OperationType.CREATE, "chats");
+          console.error("Failed to save chat history:", err);
         }
       } else if (user) {
         try {
           await updateDoc(doc(db, "chats", activeThread.id), {
-            messages: stripInlineImages(finalMessages),
+            messages: sanitizeChatMessagesForStorage(finalMessages),
             title: finalThread.title,
           });
         } catch (err) {
-          handleFirestoreError(err, OperationType.UPDATE, `chats/${activeThread.id}`);
+          console.error("Failed to update chat history:", err);
         }
       } else if (!user) {
-        const guestThreads = getGuestThreads();
-        const existingThreadIndex = guestThreads.findIndex((t) => t.id === activeThread.id);
-        const updatedThreadsList =
-          existingThreadIndex >= 0
-            ? guestThreads.map((t) => (t.id === activeThread.id ? finalThread : t))
-            : [finalThread, ...guestThreads];
-        localStorage.setItem("guest_chats", JSON.stringify(updatedThreadsList));
+        persistLocalChatHistory(finalThread);
       }
     } catch (error: any) {
+      const message =
+        error?.name === "AbortError"
+          ? "הבקשה לקחה יותר מדי זמן והופסקה. יצירת תמונה יכולה להיות איטית כרגע; נסה שוב בעוד רגע או בקש תמונה פשוטה יותר."
+          : error.message;
       const errorMsg: ChatMessage = {
         sender: "ai",
-        text: "מצטער, חלה שגיאה בקבלת התשובה. שים לב שאתה מחובר לאינטרנט או נסה שוב מאוחר יותר. שגיאה: " + error.message,
+        text: "מצטער, חלה שגיאה בקבלת התשובה. שים לב שאתה מחובר לאינטרנט או נסה שוב מאוחר יותר. שגיאה: " + message,
         createdAt: Date.now(),
       };
       const finalMessages = [...updatedMessages, errorMsg];
@@ -335,7 +415,7 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
                 </div>
                 <div className="p-4 bg-[var(--panel)] border border-[var(--border)] text-[var(--muted)] rounded-2xl rounded-tr-none flex items-center gap-2 text-xs font-medium shadow-xs">
                   <Loader2 size={14} className="animate-spin text-[var(--accent)]" />
-                  <span>חושב על תשובה מעמיקה ומנסח...</span>
+                  <span>{isWaitingForImage ? "יוצר תמונה ומכין אותה להצגה..." : "חושב על תשובה מעמיקה ומנסח..."}</span>
                 </div>
               </div>
             )}
