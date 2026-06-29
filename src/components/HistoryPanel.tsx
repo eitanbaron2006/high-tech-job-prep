@@ -18,6 +18,7 @@ import {
   getChatHistoryStorageKey,
   mergeChatThreads,
 } from "../lib/chat-thread";
+import { shouldSilenceCloudHistoryError } from "../lib/firebase-errors";
 import {
   History,
   Trash2,
@@ -48,6 +49,11 @@ export default function HistoryPanel({ user, onOpenExplanation }: HistoryPanelPr
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"explanations" | "chats" | "images">("explanations");
   const [expandedChatId, setExpandedChatId] = useState<string | null>(null);
+
+  const logHistoryLoadError = (label: string, error: unknown) => {
+    if (shouldSilenceCloudHistoryError(error)) return;
+    console.warn(label, error);
+  };
 
   const readLocalChats = (userId: string | null): ChatThread[] => {
     try {
@@ -98,7 +104,7 @@ export default function HistoryPanel({ user, onOpenExplanation }: HistoryPanelPr
           });
         });
       } catch (err) {
-        console.error("Error loading explanations:", err);
+        logHistoryLoadError("Error loading explanations; using available local history:", err);
       }
       setExplanations(expList);
 
@@ -122,7 +128,7 @@ export default function HistoryPanel({ user, onOpenExplanation }: HistoryPanelPr
           });
         });
       } catch (err) {
-        console.error("Error loading chats:", err);
+        logHistoryLoadError("Error loading chats; using available local history:", err);
       }
       const localChats = readLocalChats(user.uid);
       setChats(mergeChatThreads(chatList, localChats));
@@ -137,7 +143,7 @@ export default function HistoryPanel({ user, onOpenExplanation }: HistoryPanelPr
           )
         );
       } catch (err) {
-        console.error("Error loading images:", err);
+        logHistoryLoadError("Error loading images; using local image gallery:", err);
         setImages(
           mergeGeneratedImages(getLocalImages(user.uid), getGeneratedImagesFromChatThreads(localChats))
         );
