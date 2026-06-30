@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { ExplanationItem, ChatThread, GeneratedImage } from "../types";
 import { User } from "firebase/auth";
 import { collection, getDocs, query, where, orderBy, deleteDoc, doc } from "firebase/firestore";
@@ -506,9 +507,9 @@ export default function HistoryPanel({ user, onOpenExplanation, refreshKey = 0 }
         )
       )}
 
-      {selectedImage && (
+      {selectedImage && typeof document !== "undefined" && createPortal(
         <div
-          className="fixed inset-0 z-[200] bg-black/90 p-4 sm:p-6 flex flex-col"
+          className="fixed inset-0 z-[10000] bg-black/90 p-4 sm:p-6 flex flex-col"
           role="dialog"
           aria-modal="true"
           aria-label="תצוגת תמונה במסך מלא"
@@ -557,7 +558,8 @@ export default function HistoryPanel({ user, onOpenExplanation, refreshKey = 0 }
               className="max-w-full max-h-full object-contain rounded-lg shadow-2xl bg-white"
             />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>
