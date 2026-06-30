@@ -14,6 +14,7 @@ export interface ChatMessage {
   sender: "user" | "ai";
   text: string;
   imageUrl?: string;
+  localImageKey?: string;
   imagePrompt?: string;
   createdAt: number;
 }
@@ -24,6 +25,7 @@ export interface GeneratedImage {
   url: string;
   prompt: string;
   storagePath?: string;
+  localImageKey?: string;
   createdAt: string;
   localOnly?: boolean;
 }

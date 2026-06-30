@@ -72,6 +72,10 @@ export const sanitizeChatMessagesForStorage = (messages: ChatMessage[]): ChatMes
       sanitized.imageUrl = message.imageUrl;
     }
 
+    if (message.localImageKey !== undefined) {
+      sanitized.localImageKey = message.localImageKey;
+    }
+
     if (message.imagePrompt !== undefined) {
       sanitized.imagePrompt = message.imagePrompt;
     }

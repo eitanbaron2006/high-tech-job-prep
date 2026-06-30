@@ -86,6 +86,7 @@ test("sanitizes chat messages for Firestore without undefined fields", () => {
       sender: "ai",
       text: "הנה תמונה",
       imageUrl: "data:image/png;base64,abc123",
+      localImageKey: "user-1_123",
       imagePrompt: undefined,
       createdAt: 123,
     },
@@ -99,6 +100,7 @@ test("sanitizes chat messages for Firestore without undefined fields", () => {
   ]);
 
   assert.equal(Object.hasOwn(sanitized[0], "imageUrl"), false);
+  assert.equal(sanitized[0].localImageKey, "user-1_123");
   assert.equal(Object.hasOwn(sanitized[0], "imagePrompt"), false);
   assert.equal(sanitized[1].imageUrl, "https://storage.example/image.png");
   assert.equal(sanitized[1].imagePrompt, "Binary search");

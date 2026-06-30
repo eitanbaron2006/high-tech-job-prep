@@ -921,6 +921,32 @@ td.mono.r {
   color: #f0a868;
 }
 
+/* History image gallery: card width follows the configured thumbnail display size */
+.history-image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 16.5rem);
+  justify-content: end;
+  align-items: start;
+  gap: 1rem;
+}
+
+.history-image-card {
+  width: 16.5rem;
+  max-width: 100%;
+}
+
+.history-image-thumb {
+  width: 100%;
+  overflow: hidden;
+  background: #fff;
+}
+
+@media (max-width: 640px) {
+  .history-image-grid {
+    grid-template-columns: minmax(0, 16.5rem);
+  }
+}
+
 /* Strip the backtick pseudo-content that prose adds around code */
 .companion-chat-bubble code::before,
 .companion-chat-bubble code::after {

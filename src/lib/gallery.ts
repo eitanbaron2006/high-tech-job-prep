@@ -18,6 +18,7 @@ import { db, storage } from "../firebase.ts";
 import type { GeneratedImage } from "../types.ts";
 import {
   dataUrlToBlob,
+  createLocalImageKey,
   getGeneratedImagesFromChatThreads,
   getGuestImages,
   getLocalImages,
@@ -27,9 +28,11 @@ import {
   saveGeneratedImageWithDeps,
   setLocalImages,
 } from "./gallery-core.ts";
+import { deleteLocalImageData, saveLocalImageData } from "./local-image-store.ts";
 
 export {
   dataUrlToBlob,
+  createLocalImageKey,
   getGeneratedImagesFromChatThreads,
   getGuestImages,
   getLocalImages,
@@ -47,18 +50,20 @@ export {
 export async function saveGeneratedImage(
   userId: string | null,
   dataUrl: string,
-  prompt: string
+  prompt: string,
+  localImageKey?: string
 ): Promise<GeneratedImage> {
   return saveGeneratedImageWithDeps(userId, dataUrl, prompt, {
     now: () => Date.now(),
     getLocalImages,
     setLocalImages,
+    saveLocalImageData,
     uploadImage: async (path, blob, metadata) => {
       await uploadBytes(storageRef(storage, path), blob, metadata);
     },
     getImageDownloadUrl: async (path) => getDownloadURL(storageRef(storage, path)),
     addImageDoc: async (data) => addDoc(collection(db, "images"), data),
-  });
+  }, localImageKey);
 }
 
 export async function fetchUserImages(userId: string): Promise<GeneratedImage[]> {
@@ -77,6 +82,7 @@ export async function fetchUserImages(userId: string): Promise<GeneratedImage[]>
       url: data.url,
       prompt: data.prompt,
       storagePath: data.storagePath,
+      localImageKey: data.localImageKey,
       createdAt: data.createdAt,
     });
   });
@@ -89,9 +95,19 @@ export async function deleteGeneratedImage(
 ): Promise<void> {
   if (!userId || item.localOnly || item.id.startsWith("local_")) {
     setLocalImages(userId, getLocalImages(userId).filter((i) => i.id !== item.id));
+    if (item.localImageKey) {
+      await deleteLocalImageData(item.localImageKey).catch((err) => {
+        console.warn("[gallery] failed to delete local image data:", err);
+      });
+    }
     return;
   }
   await deleteDoc(doc(db, "images", item.id));
+  if (item.localImageKey) {
+    await deleteLocalImageData(item.localImageKey).catch((err) => {
+      console.warn("[gallery] failed to delete local image data:", err);
+    });
+  }
   if (item.storagePath) {
     try {
       await deleteObject(storageRef(storage, item.storagePath));

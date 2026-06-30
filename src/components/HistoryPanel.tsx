@@ -19,6 +19,7 @@ import {
   mergeChatThreads,
 } from "../lib/chat-thread";
 import { shouldSilenceCloudHistoryError } from "../lib/firebase-errors";
+import { hydrateChatThreadsImages, hydrateGeneratedImages } from "../lib/local-image-store";
 import {
   History,
   Trash2,
@@ -34,21 +35,24 @@ import {
   Download,
   ChevronDown,
   Bot,
-  UserCircle
+  UserCircle,
+  X
 } from "lucide-react";
 
 interface HistoryPanelProps {
   user: User | null;
   onOpenExplanation: (item: ExplanationItem) => void;
+  refreshKey?: number;
 }
 
-export default function HistoryPanel({ user, onOpenExplanation }: HistoryPanelProps) {
+export default function HistoryPanel({ user, onOpenExplanation, refreshKey = 0 }: HistoryPanelProps) {
   const [explanations, setExplanations] = useState<ExplanationItem[]>([]);
   const [chats, setChats] = useState<ChatThread[]>([]);
   const [images, setImages] = useState<GeneratedImage[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"explanations" | "chats" | "images">("explanations");
   const [expandedChatId, setExpandedChatId] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<GeneratedImage | null>(null);
 
   const logHistoryLoadError = (label: string, error: unknown) => {
     if (shouldSilenceCloudHistoryError(error)) return;
@@ -74,7 +78,26 @@ export default function HistoryPanel({ user, onOpenExplanation }: HistoryPanelPr
     } else {
       loadGuestLocalHistory();
     }
-  }, [user]);
+  }, [user, refreshKey]);
+
+  useEffect(() => {
+    if (!selectedImage) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSelectedImage(null);
+      }
+    };
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [selectedImage]);
 
   const fetchHistory = async () => {
     if (!user) return;
@@ -130,22 +153,26 @@ export default function HistoryPanel({ user, onOpenExplanation }: HistoryPanelPr
       } catch (err) {
         logHistoryLoadError("Error loading chats; using available local history:", err);
       }
-      const localChats = readLocalChats(user.uid);
+      const localChats = await hydrateChatThreadsImages(readLocalChats(user.uid));
       setChats(mergeChatThreads(chatList, localChats));
 
       // 3. Fetch generated image gallery
       try {
         setImages(
-          mergeGeneratedImages(
-            await fetchUserImages(user.uid),
-            getLocalImages(user.uid),
-            getGeneratedImagesFromChatThreads(localChats)
+          await hydrateGeneratedImages(
+            mergeGeneratedImages(
+              await fetchUserImages(user.uid),
+              getLocalImages(user.uid),
+              getGeneratedImagesFromChatThreads(localChats)
+            )
           )
         );
       } catch (err) {
         logHistoryLoadError("Error loading images; using local image gallery:", err);
         setImages(
-          mergeGeneratedImages(getLocalImages(user.uid), getGeneratedImagesFromChatThreads(localChats))
+          await hydrateGeneratedImages(
+            mergeGeneratedImages(getLocalImages(user.uid), getGeneratedImagesFromChatThreads(localChats))
+          )
         );
       }
     } catch (err) {
@@ -155,12 +182,16 @@ export default function HistoryPanel({ user, onOpenExplanation }: HistoryPanelPr
     }
   };
 
-  const loadGuestLocalHistory = () => {
-    const localChats = readLocalChats(null);
+  const loadGuestLocalHistory = async () => {
+    const localChats = await hydrateChatThreadsImages(readLocalChats(null));
     setChats(localChats);
     // Set empty explanations for guests
     setExplanations([]);
-    setImages(mergeGeneratedImages(getGuestImages(), getGeneratedImagesFromChatThreads(localChats)));
+    setImages(
+      await hydrateGeneratedImages(
+        mergeGeneratedImages(getGuestImages(), getGeneratedImagesFromChatThreads(localChats))
+      )
+    );
   };
 
   const handleDeleteImage = async (item: GeneratedImage, e: React.MouseEvent) => {
@@ -422,21 +453,34 @@ export default function HistoryPanel({ user, onOpenExplanation }: HistoryPanelPr
             <p>בקש מ-AlgoBuddy בצ'אט "צור לי אינפוגרפיקה על..." וכל תמונה שתיווצר תישמר כאן להורדה.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="history-image-grid">
             {images.map((img) => (
               <div
                 key={img.id}
-                className="group bg-[var(--bg)] border border-[var(--border)] rounded-xl overflow-hidden flex flex-col shadow-xs hover:border-[var(--accent)] transition"
+                onClick={() => setSelectedImage(img)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setSelectedImage(img);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label="פתח תמונה במסך מלא"
+                className="history-image-card group bg-[var(--bg)] border border-[var(--border)] rounded-xl overflow-hidden flex flex-col shadow-xs hover:border-[var(--accent)] transition cursor-zoom-in focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
               >
-                <div className="relative">
+                <div className="history-image-thumb relative">
                   <img
                     src={img.url}
                     alt={img.prompt}
-                    className="w-full h-36 object-contain bg-white"
+                    className="block w-full h-auto bg-white"
                   />
                   <div className="absolute top-2 left-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition">
                     <button
-                      onClick={() => downloadImage(img.url, `algobuddy-${img.id}.png`)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void downloadImage(img.url, `algobuddy-${img.id}.png`);
+                      }}
                       className="flex items-center gap-1 bg-black/70 hover:bg-black/85 text-white text-[11px] font-bold px-2 py-1 rounded-lg cursor-pointer"
                       title="הורד תמונה"
                     >
@@ -460,6 +504,60 @@ export default function HistoryPanel({ user, onOpenExplanation }: HistoryPanelPr
             ))}
           </div>
         )
+      )}
+
+      {selectedImage && (
+        <div
+          className="fixed inset-0 z-[200] bg-black/90 p-4 sm:p-6 flex flex-col"
+          role="dialog"
+          aria-modal="true"
+          aria-label="תצוגת תמונה במסך מלא"
+          onClick={() => setSelectedImage(null)}
+        >
+          <div
+            className="flex items-center justify-between gap-3 text-white mb-3"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-white line-clamp-1">{selectedImage.prompt}</p>
+              <span className="text-xs text-white/70">{formatDate(selectedImage.createdAt)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void downloadImage(selectedImage.url, `algobuddy-${selectedImage.id}.png`);
+                }}
+                className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-3 py-2 rounded-lg transition"
+                title="הורד תמונה"
+              >
+                <Download size={15} />
+                הורד
+              </button>
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setSelectedImage(null);
+                }}
+                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition"
+                title="סגור"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+
+          <div
+            className="min-h-0 flex-1 flex items-center justify-center"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <img
+              src={selectedImage.url}
+              alt={selectedImage.prompt}
+              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl bg-white"
+            />
+          </div>
+        </div>
       )}
 
     </div>

@@ -1,9 +1,21 @@
 import type { ChatThread, GeneratedImage } from "../types.ts";
 
 export const LEGACY_GUEST_IMAGES_KEY = "guest_images";
+export const LOCAL_IMAGE_URL_PREFIX = "local-image://";
 
 export const getLocalImagesStorageKey = (userId: string | null | undefined): string =>
   `algobuddy_images_${userId || "guest"}`;
+
+export const createLocalImageKey = (userId: string | null | undefined, now: number): string =>
+  `${userId || "guest"}_${now}`;
+
+export const toLocalImageUrl = (localImageKey: string): string =>
+  `${LOCAL_IMAGE_URL_PREFIX}${localImageKey}`;
+
+export const getLocalImageKeyFromUrl = (url: string | undefined): string | null => {
+  if (!url?.startsWith(LOCAL_IMAGE_URL_PREFIX)) return null;
+  return url.slice(LOCAL_IMAGE_URL_PREFIX.length);
+};
 
 const readImagesFromKey = (key: string): GeneratedImage[] => {
   try {
@@ -17,8 +29,9 @@ export const mergeGeneratedImages = (...groups: GeneratedImage[][]): GeneratedIm
   const byId = new Map<string, GeneratedImage>();
 
   for (const image of groups.flat()) {
-    if (!byId.has(image.id)) {
-      byId.set(image.id, image);
+    const key = image.localImageKey || image.id;
+    if (!byId.has(key)) {
+      byId.set(key, image);
     }
   }
 
@@ -40,22 +53,43 @@ export const getGuestImages = (): GeneratedImage[] => {
 export const getGeneratedImagesFromChatThreads = (threads: ChatThread[]): GeneratedImage[] =>
   threads.flatMap((thread) =>
     thread.messages
-      .filter((message) => Boolean(message.imageUrl))
-      .map((message) => ({
-        id: `chat_${thread.id}_${message.createdAt}`,
-        userId: thread.userId,
-        url: message.imageUrl!,
-        prompt: message.imagePrompt || message.text,
-        createdAt: new Date(message.createdAt).toISOString(),
-        localOnly: message.imageUrl!.startsWith("data:"),
-      }))
+      .filter((message) => Boolean(message.imageUrl || message.localImageKey))
+      .map((message) => {
+        const localImageKey =
+          message.localImageKey || getLocalImageKeyFromUrl(message.imageUrl) || undefined;
+        const url = message.imageUrl || (localImageKey ? toLocalImageUrl(localImageKey) : "");
+
+        return {
+          id: `chat_${thread.id}_${message.createdAt}`,
+          userId: thread.userId,
+          url,
+          prompt: message.imagePrompt || message.text,
+          localImageKey,
+          createdAt: new Date(message.createdAt).toISOString(),
+          localOnly: url.startsWith("data:") || Boolean(localImageKey),
+        };
+      })
   );
+
+export const serializeGeneratedImageForLocalStorage = (
+  image: GeneratedImage
+): GeneratedImage => {
+  if (!image.url.startsWith("data:")) return image;
+  if (!image.localImageKey) {
+    const { url, ...withoutUrl } = image;
+    return { ...withoutUrl, url: "" };
+  }
+  return {
+    ...image,
+    url: toLocalImageUrl(image.localImageKey),
+  };
+};
 
 export const setLocalImages = (
   userId: string | null | undefined,
   images: GeneratedImage[]
 ) => {
-  const limited = images.slice(0, 30);
+  const limited = images.slice(0, 30).map(serializeGeneratedImageForLocalStorage);
   localStorage.setItem(getLocalImagesStorageKey(userId), JSON.stringify(limited));
   if (!userId) {
     localStorage.setItem(LEGACY_GUEST_IMAGES_KEY, JSON.stringify(limited));
@@ -92,6 +126,7 @@ export type GalleryDeps = {
   now: () => number;
   getLocalImages: (userId: string | null) => GeneratedImage[];
   setLocalImages: (userId: string | null, images: GeneratedImage[]) => void;
+  saveLocalImageData?: (key: string, dataUrl: string) => Promise<void>;
   uploadImage: (path: string, blob: Blob, metadata: ImageUploadMetadata) => Promise<void>;
   getImageDownloadUrl: (path: string) => Promise<string>;
   addImageDoc: (data: Omit<GeneratedImage, "id" | "localOnly">) => Promise<{ id: string }>;
@@ -102,30 +137,56 @@ const createLocalImageItem = (
   dataUrl: string,
   prompt: string,
   createdAt: string,
-  now: number
+  now: number,
+  localImageKey = createLocalImageKey(userId, now)
 ): GeneratedImage => ({
   id: "local_" + now,
   userId: userId || "guest",
   url: dataUrl,
   prompt,
+  localImageKey,
   createdAt,
   localOnly: true,
 });
+
+const persistLocalImageItem = async (
+  userId: string | null,
+  item: GeneratedImage,
+  dataUrl: string,
+  deps: GalleryDeps
+): Promise<void> => {
+  if (item.localImageKey) {
+    try {
+      await deps.saveLocalImageData?.(item.localImageKey, dataUrl);
+    } catch (err) {
+      console.warn("[gallery] failed to save local image data:", err);
+    }
+  }
+
+  deps.setLocalImages(userId, [
+    serializeGeneratedImageForLocalStorage(item),
+    ...deps.getLocalImages(userId),
+  ]);
+};
 
 export async function saveGeneratedImageWithDeps(
   userId: string | null,
   dataUrl: string,
   prompt: string,
-  deps: GalleryDeps
+  deps: GalleryDeps,
+  localImageKey?: string
 ): Promise<GeneratedImage> {
   const now = deps.now();
   const createdAt = new Date(now).toISOString();
 
   if (!userId) {
-    const item = createLocalImageItem(null, dataUrl, prompt, createdAt, now);
-    deps.setLocalImages(null, [item, ...deps.getLocalImages(null)]);
+    const item = createLocalImageItem(null, dataUrl, prompt, createdAt, now, localImageKey);
+    await persistLocalImageItem(null, item, dataUrl, deps);
     return item;
   }
+
+  const localItem = createLocalImageItem(userId, dataUrl, prompt, createdAt, now, localImageKey);
+  await persistLocalImageItem(userId, localItem, dataUrl, deps);
 
   const path = `generated-images/${userId}/${now}.png`;
   const blob = await dataUrlToBlob(dataUrl);
@@ -140,15 +201,22 @@ export async function saveGeneratedImageWithDeps(
       prompt,
       url,
       storagePath: path,
+      localImageKey: localItem.localImageKey,
       createdAt,
     });
 
-    return { id: docRef.id, userId, url, prompt, storagePath: path, createdAt };
+    return {
+      id: docRef.id,
+      userId,
+      url,
+      prompt,
+      storagePath: path,
+      localImageKey: localItem.localImageKey,
+      createdAt,
+    };
   } catch (err) {
-    const item = createLocalImageItem(userId, dataUrl, prompt, createdAt, now);
-    deps.setLocalImages(userId, [item, ...deps.getLocalImages(userId)]);
     const reason = shouldUseLocalImageFallback(err) ? "storage" : "cloud";
     console.warn(`[gallery] ${reason} image save failed; saved locally instead:`, err);
-    return item;
+    return localItem;
   }
 }

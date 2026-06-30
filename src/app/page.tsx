@@ -87,6 +87,7 @@ export default function App() {
   const [isChatFullscreen, setIsChatFullscreen] = useState(false);
   const [chatSize, setChatSize] = useState({ width: 600, height: 520 });
   const [chatAutoFit, setChatAutoFit] = useState(true);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   // Auto-fit: grow the chat window to fit wide content (code blocks / images),
   // up to the viewport. Never shrinks, and yields to manual resize / fullscreen.
@@ -1968,6 +1969,7 @@ def find_kth_largest(nums, k):
             >
               <HistoryPanel 
                 user={user} 
+                refreshKey={historyRefreshKey}
                 onOpenExplanation={(item) => {
                   setHistoryExplainItem(item);
                   setSelectedText(item.selectedText);
@@ -2087,6 +2089,7 @@ def find_kth_largest(nums, k):
                 isFullscreen={isChatFullscreen}
                 onToggleFullscreen={() => setIsChatFullscreen((v) => !v)}
                 onAutoWidth={applyChatAutoWidth}
+                onImageGenerated={() => setHistoryRefreshKey((key) => key + 1)}
               />
             </motion.div>
           )}
