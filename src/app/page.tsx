@@ -34,7 +34,11 @@ import {
   FileText,
   Video,
   Home,
-  Compass
+  Compass,
+  Languages,
+  ClipboardPaste,
+  ListChecks,
+  Image as ImageIcon
 } from "lucide-react";
 import { auth, loginWithGoogle, logout } from "../firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
@@ -43,6 +47,11 @@ import { ExplanationItem } from "../types";
 import ExplainDialog from "../components/ExplainDialog";
 import CompanionChat from "../components/CompanionChat";
 import HistoryPanel from "../components/HistoryPanel";
+import {
+  SelectionContextActionId,
+  buildSelectionContextActions,
+  buildSelectionPrompt,
+} from "../lib/selection-context-actions";
 
 const DEFAULT_PATTERNS = [
   { id: "two-pointers", name: "שני מצביעים", desc: "Two Pointers - מעבר יעיל משני קצוות המערך" },
@@ -54,6 +63,11 @@ const DEFAULT_PATTERNS = [
   { id: "binary-search", name: "חיפוש בינארי על התשובה", desc: "Binary Search on Answer - צמצום טווח האפשרויות בחצי" },
   { id: "monotonic-stack", name: "מחסנית מונוטונית", desc: "Monotonic Stack - מציאת האיבר הבא הגדול/הקטן ביותר" }
 ];
+
+type QueuedChatText = {
+  id: number;
+  text: string;
+};
 
 const getDailyRecommendation = () => {
   const days = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
@@ -88,6 +102,8 @@ export default function App() {
   const [chatSize, setChatSize] = useState({ width: 600, height: 520 });
   const [chatAutoFit, setChatAutoFit] = useState(true);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [queuedChatPrompt, setQueuedChatPrompt] = useState<QueuedChatText | null>(null);
+  const [queuedChatDraft, setQueuedChatDraft] = useState<QueuedChatText | null>(null);
 
   // Auto-fit: grow the chat window to fit wide content (code blocks / images),
   // up to the viewport. Never shrinks, and yields to manual resize / fullscreen.
@@ -287,6 +303,69 @@ export default function App() {
       setCopiedTextId(id);
       setTimeout(() => setCopiedTextId(null), 1500);
     });
+  };
+
+  const queueChatPrompt = (text: string) => {
+    setIsFloatingChatOpen(true);
+    setIsProgressOpen(false);
+    setQueuedChatPrompt({ id: Date.now(), text });
+  };
+
+  const queueChatDraft = (text: string) => {
+    setIsFloatingChatOpen(true);
+    setIsProgressOpen(false);
+    setQueuedChatDraft({ id: Date.now(), text });
+  };
+
+  const closeSelectionContextMenu = () => setContextMenuCoords(null);
+
+  const handleSelectionContextAction = async (actionId: SelectionContextActionId) => {
+    const text = selectedText.trim();
+    if (!text) return;
+
+    if (actionId === "explain") {
+      setHistoryExplainItem(null);
+      setIsExplainOpen(true);
+      closeSelectionContextMenu();
+      return;
+    }
+
+    if (actionId === "copy") {
+      await navigator.clipboard.writeText(text);
+      closeSelectionContextMenu();
+      return;
+    }
+
+    if (actionId === "pasteToChat") {
+      queueChatDraft(text);
+      closeSelectionContextMenu();
+      return;
+    }
+
+    queueChatPrompt(buildSelectionPrompt(actionId, text));
+    closeSelectionContextMenu();
+  };
+
+  const getSelectionActionIcon = (actionId: SelectionContextActionId) => {
+    switch (actionId) {
+      case "copy":
+        return <Copy size={14} />;
+      case "pasteToChat":
+        return <ClipboardPaste size={14} />;
+      case "translate":
+        return <Languages size={14} />;
+      case "python":
+        return <Code2 size={14} />;
+      case "practice":
+        return <ListChecks size={14} />;
+      case "diagram":
+        return <ImageIcon size={14} />;
+      case "summarize":
+        return <FileText size={14} />;
+      case "explain":
+      default:
+        return <Brain size={14} />;
+    }
   };
 
   const togglePuzzle = (num: number) => {
@@ -641,20 +720,35 @@ export default function App() {
             left: `${contextMenuCoords.x}px`,
             zIndex: 9999,
           }}
-          className="bg-[var(--panel)] border border-[var(--border)] rounded-lg shadow-2xl py-1.5 min-w-[160px] animate-in fade-in zoom-in-95 duration-150 select-none text-right"
+          className="bg-[var(--panel)] border border-[var(--border)] rounded-xl shadow-2xl min-w-[260px] max-w-[300px] animate-in fade-in zoom-in-95 duration-150 select-none text-right overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
-          <button
-            onClick={() => {
-              setHistoryExplainItem(null); // Fresh explain
-              setIsExplainOpen(true);
-              setContextMenuCoords(null);
-            }}
-            className="w-full text-right px-4 py-2 text-xs font-bold text-[var(--text)] hover:bg-[var(--accent)] hover:text-white transition flex items-center justify-between gap-3 cursor-pointer"
-          >
-            <span>אני לא מבין 🧠</span>
-            <span className="text-[10px] opacity-60">הסבר AI</span>
-          </button>
+          <div className="px-3 py-2 border-b border-[var(--border)] bg-[var(--bg)]">
+            <p className="text-[11px] leading-snug text-[var(--muted)] line-clamp-2 m-0">
+              "{selectedText}"
+            </p>
+          </div>
+
+          <div className="py-1">
+            {buildSelectionContextActions(selectedText).map((action, idx, actions) => {
+              const showDivider = idx > 0 && action.group !== actions[idx - 1].group;
+              return (
+                <React.Fragment key={action.id}>
+                  {showDivider && <div className="my-1 border-t border-[var(--border)]" />}
+                  <button
+                    onClick={() => void handleSelectionContextAction(action.id)}
+                    className="w-full text-right px-3 py-2 text-xs font-bold text-[var(--text)] hover:bg-[var(--accent)] hover:text-white transition flex items-center justify-between gap-3 cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      <span className="shrink-0 opacity-80">{getSelectionActionIcon(action.id)}</span>
+                      <span className="truncate">{action.label}</span>
+                    </span>
+                    <span className="text-[10px] opacity-60 shrink-0">{action.hint}</span>
+                  </button>
+                </React.Fragment>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -2090,6 +2184,14 @@ def find_kth_largest(nums, k):
                 onToggleFullscreen={() => setIsChatFullscreen((v) => !v)}
                 onAutoWidth={applyChatAutoWidth}
                 onImageGenerated={() => setHistoryRefreshKey((key) => key + 1)}
+                queuedPrompt={queuedChatPrompt}
+                queuedDraft={queuedChatDraft}
+                onQueuedPromptConsumed={(id) =>
+                  setQueuedChatPrompt((current) => (current?.id === id ? null : current))
+                }
+                onQueuedDraftConsumed={(id) =>
+                  setQueuedChatDraft((current) => (current?.id === id ? null : current))
+                }
               />
             </motion.div>
           )}

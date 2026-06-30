@@ -33,6 +33,11 @@ import {
 
 const CHAT_REQUEST_TIMEOUT_MS = 180_000;
 
+type QueuedChatText = {
+  id: number;
+  text: string;
+};
+
 interface CompanionChatProps {
   user: User | null;
   onClose?: () => void;
@@ -41,15 +46,34 @@ interface CompanionChatProps {
   onToggleFullscreen?: () => void;
   onAutoWidth?: (width: number) => void;
   onImageGenerated?: () => void;
+  queuedPrompt?: QueuedChatText | null;
+  queuedDraft?: QueuedChatText | null;
+  onQueuedPromptConsumed?: (id: number) => void;
+  onQueuedDraftConsumed?: (id: number) => void;
 }
 
-export default function CompanionChat({ user, onClose, highThinking = false, isFullscreen = false, onToggleFullscreen, onAutoWidth, onImageGenerated }: CompanionChatProps) {
+export default function CompanionChat({
+  user,
+  onClose,
+  highThinking = false,
+  isFullscreen = false,
+  onToggleFullscreen,
+  onAutoWidth,
+  onImageGenerated,
+  queuedPrompt,
+  queuedDraft,
+  onQueuedPromptConsumed,
+  onQueuedDraftConsumed,
+}: CompanionChatProps) {
   const currentUserId = user?.uid || "guest";
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const activeThreadRef = useRef<ChatThread | null>(null);
+  const consumedQueuedPromptIdRef = useRef<number | null>(null);
+  const consumedQueuedDraftIdRef = useRef<number | null>(null);
 
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const latestUserMessage =
@@ -336,6 +360,25 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
     }
   };
 
+  useEffect(() => {
+    if (!queuedDraft || consumedQueuedDraftIdRef.current === queuedDraft.id) return;
+
+    consumedQueuedDraftIdRef.current = queuedDraft.id;
+    setInput(queuedDraft.text);
+    inputRef.current?.focus();
+    onQueuedDraftConsumed?.(queuedDraft.id);
+  }, [queuedDraft, onQueuedDraftConsumed]);
+
+  useEffect(() => {
+    if (!queuedPrompt || !activeThread || loading) return;
+    if (consumedQueuedPromptIdRef.current === queuedPrompt.id) return;
+
+    consumedQueuedPromptIdRef.current = queuedPrompt.id;
+    onQueuedPromptConsumed?.(queuedPrompt.id);
+    void handleSend(queuedPrompt.text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queuedPrompt, activeThread, loading, onQueuedPromptConsumed]);
+
   const presetPrompts = [
     { label: "התחל סימולציית ראיון 🎯", text: "אני רוצה שנתחיל סימולציה של ראיון הייטק מעשי בנושא אלגוריתמים. שאל אותי שאלת LeetCode בינונית והנחה אותי." },
     { label: "טיפ מעשי לראיון בזמן אמת 💡", text: "תן לי כמה טיפים מעשיים איך להתמודד עם לחץ בראיון, איך להסביר סיבוכיות בקול רם, ואיך לחשוב ביחד עם המראיין." },
@@ -481,6 +524,7 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
             className="p-3 border-t border-[var(--border)] bg-[var(--panel)] flex items-center gap-2"
           >
             <input
+              ref={inputRef}
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
