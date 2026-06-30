@@ -94,8 +94,12 @@ test("falls back to local gallery storage when Firebase Storage retry limit is e
     code: "storage/retry-limit-exceeded",
   });
 
+  const warnings: any[] = [];
+  const infos: any[] = [];
   const originalWarn = console.warn;
-  console.warn = () => {};
+  const originalInfo = console.info;
+  console.warn = (...args: any[]) => warnings.push(args);
+  console.info = (...args: any[]) => infos.push(args);
   let saved;
   try {
     saved = await saveGeneratedImageWithDeps("user-1", SAMPLE_PNG_DATA_URL, "prompt text", {
@@ -115,9 +119,12 @@ test("falls back to local gallery storage when Firebase Storage retry limit is e
     });
   } finally {
     console.warn = originalWarn;
+    console.info = originalInfo;
   }
 
   assert.equal(isFirebaseStorageRetryLimitError(retryLimitError), true);
+  assert.equal(warnings.length, 0);
+  assert.match(infos[0][0], /saved locally/i);
   assert.equal(saved.localOnly, true);
   assert.equal(saved.userId, "user-1");
   assert.equal(saved.url, SAMPLE_PNG_DATA_URL);

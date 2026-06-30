@@ -122,3 +122,20 @@ test("asks Nano Banana 2 for Hebrew labels when the user asks in Hebrew", () => 
   assert.match(prompt, /תבנית/);
   assert.doesNotMatch(prompt, /English words only/);
 });
+
+test("keeps single-algorithm Hebrew image requests focused on that algorithm", () => {
+  const prompt = buildImagePrompt(
+    "אני רוצה שתיצור לי תמונה שמסבירה את אלגוריתם two pointers כולל יישום מלאה ושאלות דוגמא ומאפייני הזיהוי של האלגוריתם"
+  );
+
+  assert.match(prompt, /two pointers/i);
+  assert.match(prompt, /מזהים/);
+  assert.match(prompt, /יישום Python/);
+  assert.match(prompt, /שאלות דוגמה/);
+  assert.doesNotMatch(prompt, /2x4/);
+  assert.doesNotMatch(prompt, /8 numbered cards/);
+  assert.doesNotMatch(prompt, /חלון מחליק/);
+  assert.doesNotMatch(prompt, /מפת גיבוב/);
+  assert.doesNotMatch(prompt, /BFS\/DFS/);
+  assert.doesNotMatch(prompt, /תכנון דינמי/);
+});

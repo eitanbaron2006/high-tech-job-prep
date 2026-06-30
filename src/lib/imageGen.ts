@@ -19,12 +19,23 @@ interface ImageGenerationAttempt {
 
 const containsHebrew = (text: string): boolean => /[\u0590-\u05FF]/.test(text);
 
+const isEightPatternOverviewRequest = (text: string): boolean =>
+  /(?:\b8\b|שמונה).{0,30}(?:תבניות|patterns)/i.test(text) ||
+  /(?:כל|כול).{0,30}(?:התבניות|תבניות הליבה|patterns)/i.test(text);
+
 export const buildImagePrompt = (concept: string) => {
   if (containsHebrew(concept)) {
+    const overviewLayout = isEightPatternOverviewRequest(concept)
+      ? `Use a polished 2x4 grid of 8 numbered cards. Each card should feel complete: a bold pattern name, a compact "מה מזהה" section, a compact "יישום Python" section, and one colorful icon/diagram.
+Use exact short Hebrew labels where relevant: "תבנית", "מזהים", "יישום Python", "שני מצביעים", "חלון מחליק", "מפת גיבוב", "BFS/DFS", "תכנון דינמי", "ערימה", "חיפוש בינארי", "מחסנית מונוטונית".`
+      : `Respect the user's requested topic exactly. If the request is about one algorithm or one pattern, create a focused infographic about that algorithm only.
+Do NOT turn a single-algorithm request into an overview of multiple patterns. Do NOT include unrelated algorithm cards or labels.
+Use a clear single-topic structure with sections such as "מה זה", "מתי מזהים", "איך זה עובד", "יישום Python", "שאלות דוגמה", and "סיבוכיות".
+When the topic is Two Pointers / שני מצביעים, show only the Two Pointers idea: an array, left/right pointers moving inward or forward, conditions, a compact Python implementation, examples like Two Sum / Palindrome / Container With Most Water, and identification signals.`;
+
     return `Create a rich, premium, high-information Hebrew educational infographic / cheat sheet that visually explains: "${concept}".
 Use a right-to-left (RTL) layout and write all visible labels in clear, correctly spelled Hebrew only.
-Use a polished 2x4 grid of 8 numbered cards when the prompt asks for 8 patterns. Each card should feel complete: a bold pattern name, a compact "מה מזהה" section, a compact "יישום Python" section, and one colorful icon/diagram.
-Use exact short Hebrew labels where relevant: "תבנית", "מזהים", "יישום Python", "שני מצביעים", "חלון מחליק", "מפת גיבוב", "BFS/DFS", "תכנון דינמי", "ערימה", "חיפוש בינארי", "מחסנית מונוטונית".
+${overviewLayout}
 If code appears, keep it very short and use Python keywords only where helpful, such as "for", "while", "dict", "heapq", "stack", "deque"; do not generate long code blocks.
 Do NOT write gibberish, fake Hebrew, random letters, misspelled Hebrew, or mixed-up right-to-left text.
 Style: rich but readable, crisp RTL typography, colorful rounded cards, subtle coding background, professional tech illustration, high contrast, dense enough to feel like a memorable cheat sheet, no clutter.`;

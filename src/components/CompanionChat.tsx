@@ -48,6 +48,7 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const activeThreadRef = useRef<ChatThread | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const messagesRef = useRef<HTMLDivElement | null>(null);
@@ -72,6 +73,15 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
     });
     if (maxW > 0) onAutoWidth(maxW + 130);
   };
+
+  const setActiveThreadAndRef = (thread: ChatThread | null) => {
+    activeThreadRef.current = thread;
+    setActiveThread(thread);
+  };
+
+  useEffect(() => {
+    activeThreadRef.current = activeThread;
+  }, [activeThread]);
 
   useEffect(() => {
     measureContentWidth();
@@ -113,9 +123,11 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
       now: new Date(),
     });
 
-    setActiveThread(initialThread);
+    setActiveThreadAndRef(initialThread);
     void hydrateChatThreadImages(initialThread).then((hydratedThread) => {
-      setActiveThread((prev) => (prev?.id === hydratedThread.id ? hydratedThread : prev));
+      if (activeThreadRef.current?.id === hydratedThread.id) {
+        setActiveThreadAndRef(hydratedThread);
+      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserId]);
@@ -140,7 +152,7 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
     });
 
     setInput("");
-    setActiveThread(newThread);
+    setActiveThreadAndRef(newThread);
   };
 
   const getStoredChatHistory = (): ChatThread[] => {
@@ -187,7 +199,7 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
       updatedThread.title = createChatTitleFromMessage(messageText);
     }
 
-    setActiveThread(updatedThread);
+    setActiveThreadAndRef(updatedThread);
     persistActiveChatThread(updatedThread);
     setLoading(true);
 
@@ -233,28 +245,30 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
         // or fail independently, and must not keep the chat in a loading state.
         void saveGeneratedImage(user?.uid || null, data.imageUrl, data.prompt || messageText, localImageKey)
           .then((saved) => {
-            setActiveThread((prev) => {
-              if (!prev) return prev;
-              const nextThread = {
-                ...prev,
-                messages: prev.messages.map((m) =>
-                  m.sender === "ai" && m.createdAt === imageCreatedAt
-                    ? { ...m, imageUrl: saved.url, localImageKey: saved.localImageKey || localImageKey }
-                    : m
-                ),
-              };
-              persistActiveChatThread(nextThread);
-              persistLocalChatHistory(nextThread);
-              onImageGenerated?.();
-              if (user && !nextThread.id.startsWith("temp_") && !saved.localOnly) {
-                void updateDoc(doc(db, "chats", nextThread.id), {
-                  messages: sanitizeChatMessagesForStorage(nextThread.messages),
-                }).catch((err) => {
-                  console.error("Failed to update chat image URL in history:", err);
-                });
-              }
-              return nextThread;
-            });
+            const currentThread = activeThreadRef.current;
+            if (!currentThread) return;
+
+            const nextThread = {
+              ...currentThread,
+              messages: currentThread.messages.map((m) =>
+                m.sender === "ai" && m.createdAt === imageCreatedAt
+                  ? { ...m, imageUrl: saved.url, localImageKey: saved.localImageKey || localImageKey }
+                  : m
+              ),
+            };
+
+            setActiveThreadAndRef(nextThread);
+            persistActiveChatThread(nextThread);
+            persistLocalChatHistory(nextThread);
+            onImageGenerated?.();
+
+            if (user && !nextThread.id.startsWith("temp_") && !saved.localOnly) {
+              void updateDoc(doc(db, "chats", nextThread.id), {
+                messages: sanitizeChatMessagesForStorage(nextThread.messages),
+              }).catch((err) => {
+                console.error("Failed to update chat image URL in history:", err);
+              });
+            }
           })
           .catch((err) => {
             console.error("Failed to save generated image:", err);
@@ -270,7 +284,7 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
       const finalMessages = [...updatedMessages, aiMsg];
       const finalThread = { ...updatedThread, messages: finalMessages };
 
-      setActiveThread(finalThread);
+      setActiveThreadAndRef(finalThread);
       setLoading(false);
       persistActiveChatThread(finalThread);
       persistLocalChatHistory(finalThread);
@@ -287,7 +301,7 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
           const savedThread = { ...finalThread, id: docRef.id };
           persistActiveChatThread(savedThread);
           persistLocalChatHistory(savedThread, finalThread.id);
-          setActiveThread((prev) => (prev ? { ...prev, id: docRef.id } : savedThread));
+          setActiveThreadAndRef(activeThreadRef.current ? { ...activeThreadRef.current, id: docRef.id } : savedThread);
         } catch (err) {
           console.error("Failed to save chat history:", err);
         }
@@ -315,7 +329,7 @@ export default function CompanionChat({ user, onClose, highThinking = false, isF
       };
       const finalMessages = [...updatedMessages, errorMsg];
       const finalThread = { ...updatedThread, messages: finalMessages };
-      setActiveThread(finalThread);
+      setActiveThreadAndRef(finalThread);
       persistActiveChatThread(finalThread);
     } finally {
       setLoading(false);

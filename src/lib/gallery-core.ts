@@ -107,15 +107,23 @@ export const isFirebaseStorageRetryLimitError = (error: unknown): boolean =>
   "code" in error &&
   (error as { code?: string }).code === "storage/retry-limit-exceeded";
 
-const shouldUseLocalImageFallback = (error: unknown): boolean => {
-  if (isFirebaseStorageRetryLimitError(error)) return true;
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    typeof (error as { code?: unknown }).code === "string" &&
-    (error as { code: string }).code.startsWith("storage/")
-  );
+const getFirebaseStorageErrorCode = (error: unknown): string | null =>
+  typeof error === "object" &&
+  error !== null &&
+  "code" in error &&
+  typeof (error as { code?: unknown }).code === "string" &&
+  (error as { code: string }).code.startsWith("storage/")
+    ? (error as { code: string }).code
+    : null;
+
+const logImageSaveFallback = (error: unknown): void => {
+  const storageCode = getFirebaseStorageErrorCode(error);
+  if (storageCode) {
+    console.info(`[gallery] ${storageCode}; saved locally instead.`);
+    return;
+  }
+
+  console.warn("[gallery] cloud image save failed; saved locally instead:", error);
 };
 
 export type ImageUploadMetadata = {
@@ -215,8 +223,7 @@ export async function saveGeneratedImageWithDeps(
       createdAt,
     };
   } catch (err) {
-    const reason = shouldUseLocalImageFallback(err) ? "storage" : "cloud";
-    console.warn(`[gallery] ${reason} image save failed; saved locally instead:`, err);
+    logImageSaveFallback(err);
     return localItem;
   }
 }
